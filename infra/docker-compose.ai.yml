@@ -1,0 +1,73 @@
+services:
+  yolo-worker:
+    build:
+      context: ../backend-fastapi/workers
+      dockerfile: yolo_worker/Dockerfile.worker
+    restart: unless-stopped
+    volumes:
+      - ../storage:/app/storage
+      - ../models:/app/models:ro
+    env_file:
+      - ../backend-fastapi/workers/.env
+    environment:
+      - DEDUP_TTL_SECONDS=30
+    networks:
+      - gtvision
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  facial-worker:
+    build:
+      context: ../backend-fastapi/workers
+      dockerfile: facial_worker/Dockerfile.worker
+    container_name: facial_worker
+    restart: unless-stopped
+    volumes:
+      - ../storage:/app/storage
+      - ../models:/app/models:ro
+      - ai-insightface-cache:/root/.insightface
+    env_file:
+      - ../backend-fastapi/workers/.env
+    networks:
+      - gtvision
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  lpr-worker:
+    build:
+      context: ../backend-fastapi/workers
+      dockerfile: lpr_worker/Dockerfile.worker
+    restart: unless-stopped
+    volumes:
+      - ../storage:/app/storage
+      - ../models:/app/models:ro
+    env_file:
+      - ../backend-fastapi/workers/.env
+    deploy:
+      replicas: 2
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - gtvision
+
+volumes:
+  ai-insightface-cache:
+
+networks:
+  gtvision:
+    name: gtvision
+    external: true

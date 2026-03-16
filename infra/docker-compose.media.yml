@@ -1,0 +1,67 @@
+services:
+  recorder-worker:
+    build:
+      context: ../backend-fastapi/workers
+      dockerfile: recorder/Dockerfile.worker
+    restart: unless-stopped
+    volumes:
+      - ../storage:/app/storage
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - STORAGE_PATH=/app/storage
+      - MEDIAMTX_URL=http://mediamtx:8888
+      - DJANGO_INTERNAL_URL=http://django:8000
+    networks:
+      - gtvision
+
+  frame-grabber:
+    build:
+      context: ../backend-fastapi/workers
+      dockerfile: frame_grabber/Dockerfile.worker
+    restart: unless-stopped
+    volumes:
+      - ../backend-fastapi/workers/frame_grabber/worker:/app/worker
+      - ../storage:/app/storage
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - STORAGE_PATH=/app/storage
+      - MEDIAMTX_URL=http://mediamtx:8888
+    networks:
+      - gtvision
+
+  clip-builder:
+    build:
+      context: ../backend-fastapi/workers
+      dockerfile: clip_builder/Dockerfile.worker
+    restart: unless-stopped
+    volumes:
+      - ../storage:/app/storage
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - REDIS_URL=redis://redis:6379/0
+      - STORAGE_PATH=/app/storage
+      - DJANGO_INTERNAL_URL=http://django:8000
+    networks:
+      - gtvision
+
+  purge-worker:
+    build:
+      context: ../backend-fastapi/workers
+      dockerfile: purge/Dockerfile.worker
+    restart: unless-stopped
+    volumes:
+      - ../storage:/app/storage
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - STORAGE_PATH=/app/storage
+      - DJANGO_INTERNAL_URL=http://django:8000
+    networks:
+      - gtvision
+
+networks:
+  gtvision:
+    name: gtvision
+    external: true

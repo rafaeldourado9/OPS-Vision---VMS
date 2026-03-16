@@ -1,0 +1,178 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "x": 200,
+      "y": 10,
+      "width": 500,
+      "height": 30,
+      "text": "GT-Vision — Video Ingestion & AI Flow",
+      "fontSize": 22,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "strokeColor": "#1e1e2e"
+    },
+    {
+      "id": "cam",
+      "type": "rectangle",
+      "x": 20,
+      "y": 60,
+      "width": 120,
+      "height": 60,
+      "strokeColor": "#6c757d",
+      "backgroundColor": "#f8f9fa",
+      "label": { "text": "Câmera IP\nRTSP/RTMP" }
+    },
+    {
+      "id": "mtx",
+      "type": "rectangle",
+      "x": 200,
+      "y": 60,
+      "width": 120,
+      "height": 60,
+      "strokeColor": "#0d6efd",
+      "backgroundColor": "#e7f1ff",
+      "label": { "text": "MediaMTX\nIngestão" }
+    },
+    {
+      "id": "split-label",
+      "type": "text",
+      "x": 370,
+      "y": 30,
+      "width": 40,
+      "height": 20,
+      "text": "Split",
+      "fontSize": 13,
+      "strokeColor": "#6c757d"
+    },
+    {
+      "id": "rec-worker",
+      "type": "rectangle",
+      "x": 380,
+      "y": 60,
+      "width": 140,
+      "height": 60,
+      "strokeColor": "#198754",
+      "backgroundColor": "#d1e7dd",
+      "label": { "text": "Recorder Worker\nFFmpeg Segments" }
+    },
+    {
+      "id": "live-view",
+      "type": "rectangle",
+      "x": 380,
+      "y": 160,
+      "width": 140,
+      "height": 60,
+      "strokeColor": "#6610f2",
+      "backgroundColor": "#e0cffc",
+      "label": { "text": "WebRTC (WHEP)\nLive View < 500ms" }
+    },
+    {
+      "id": "frame-grabber",
+      "type": "rectangle",
+      "x": 380,
+      "y": 260,
+      "width": 140,
+      "height": 60,
+      "strokeColor": "#fd7e14",
+      "backgroundColor": "#fff3cd",
+      "label": { "text": "Frame Grabber\n1 frame/seg (IA)" }
+    },
+    {
+      "id": "storage-seg",
+      "type": "rectangle",
+      "x": 580,
+      "y": 60,
+      "width": 120,
+      "height": 60,
+      "strokeColor": "#6c757d",
+      "backgroundColor": "#f8f9fa",
+      "label": { "text": "Storage\nMP4 Segments\n(10 min cada)" }
+    },
+    {
+      "id": "rmq-ai",
+      "type": "rectangle",
+      "x": 580,
+      "y": 260,
+      "width": 120,
+      "height": 60,
+      "strokeColor": "#fd7e14",
+      "backgroundColor": "#fff3cd",
+      "label": { "text": "RabbitMQ\nfila: ai.frame" }
+    },
+    {
+      "id": "ai-worker",
+      "type": "rectangle",
+      "x": 760,
+      "y": 260,
+      "width": 130,
+      "height": 60,
+      "strokeColor": "#dc3545",
+      "backgroundColor": "#f8d7da",
+      "label": { "text": "AI Worker\nLPR / ROI crop\nconfidence ≥ 0.7" }
+    },
+    {
+      "id": "rmq-event",
+      "type": "rectangle",
+      "x": 760,
+      "y": 360,
+      "width": 130,
+      "height": 60,
+      "strokeColor": "#fd7e14",
+      "backgroundColor": "#fff3cd",
+      "label": { "text": "RabbitMQ\nfila: ai.events" }
+    },
+    {
+      "id": "django-consumer",
+      "type": "rectangle",
+      "x": 580,
+      "y": 360,
+      "width": 120,
+      "height": 60,
+      "strokeColor": "#0dcaf0",
+      "backgroundColor": "#cff4fc",
+      "label": { "text": "Django\nConsumer\nPersiste evento" }
+    },
+    {
+      "id": "ws-notify",
+      "type": "rectangle",
+      "x": 380,
+      "y": 360,
+      "width": 140,
+      "height": 60,
+      "strokeColor": "#6610f2",
+      "backgroundColor": "#e0cffc",
+      "label": { "text": "WebSocket\nNotifica operadores\nem tempo real" }
+    },
+    {
+      "id": "pg-events",
+      "type": "rectangle",
+      "x": 580,
+      "y": 460,
+      "width": 120,
+      "height": 60,
+      "strokeColor": "#0d6efd",
+      "backgroundColor": "#cfe2ff",
+      "label": { "text": "PostgreSQL\nai_events table\n(por tenant_id)" }
+    },
+    {
+      "id": "purge-note",
+      "type": "text",
+      "x": 580,
+      "y": 140,
+      "width": 120,
+      "height": 40,
+      "text": "Purge Job (diário)\nexpires_at < now()",
+      "fontSize": 11,
+      "strokeColor": "#dc3545"
+    }
+  ],
+  "appState": {
+    "gridSize": 20,
+    "viewBackgroundColor": "#ffffff"
+  }
+}

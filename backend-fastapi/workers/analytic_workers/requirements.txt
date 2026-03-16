@@ -1,0 +1,7 @@
+aio-pika==9.4.3
+redis==5.0.4
+opencv-python-headless==4.9.0.80
+numpy==1.26.4
+supervision==0.21.0
+prometheus_client==0.21.0
+aiohttp==3.9.5
