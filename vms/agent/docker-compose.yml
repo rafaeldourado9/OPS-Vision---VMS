@@ -1,0 +1,12 @@
+services:
+  vms-agent:
+    build: .
+    container_name: vms-agent
+    network_mode: host  # Acesso direto à rede local das câmeras
+    restart: unless-stopped
+    environment:
+      - VMS_API_URL=https://cloud.example.com/api/v1   # URL da API do VMS
+      - VMS_API_KEY=CHANGE_ME                           # API key do agent
+      - VMS_POLL_INTERVAL=30                            # Intervalo de poll (segundos)
+      - VMS_HEARTBEAT_INTERVAL=60                       # Intervalo de heartbeat (segundos)
+      - VMS_LOG_LEVEL=INFO                              # DEBUG, INFO, WARNING, ERROR
