@@ -5,7 +5,7 @@ class WhiteLabelMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        if hasattr(request, 'reseller'):
+        if getattr(request, 'reseller', None) is not None:
             request.theme = {
                 'name': request.reseller.name,
                 'primary_color': request.reseller.primary_color,

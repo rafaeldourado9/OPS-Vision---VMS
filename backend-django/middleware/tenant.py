@@ -11,7 +11,17 @@ class TenantMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
+    # Paths que não precisam de tenant (chamadas internas e endpoints públicos)
+    BYPASS_PATHS = ('/api/v1/internal/', '/api/internal/', '/api/v1/auth/', '/api/v1/theme/', '/admin/', '/static/', '/media/')
+
     def __call__(self, request):
+        if any(request.path.startswith(p) for p in self.BYPASS_PATHS):
+            request.tenant_id = None
+            request.reseller_id = None
+            request.tenant = None
+            request.reseller = None
+            return self.get_response(request)
+
         host = request.META.get('HTTP_HOST', '').split(':')[0]
         
         # Tenta buscar no Redis primeiro

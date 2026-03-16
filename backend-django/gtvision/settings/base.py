@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'apps.segments',
     'apps.roi',
     'apps.detections',
+    'apps.persons',
     'master',
 ]
 
@@ -113,6 +114,7 @@ AUTH_USER_MODEL = 'auth_app.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'apps.authentication.backends.QueryStringJWTAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
@@ -125,7 +127,7 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -138,3 +140,8 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = config('MEDIA_ROOT', default=str(BASE_DIR / 'storage' / 'media'))
+
+INTERNAL_API_KEY = config('INTERNAL_API_KEY', default='changeme-internal-key')

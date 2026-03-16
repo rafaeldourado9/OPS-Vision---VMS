@@ -34,8 +34,8 @@ class LoginSerializer(serializers.Serializer):
                 'detail': 'Email ou senha incorretos.'
             }, code='invalid_credentials')
         
-        # Verifica se usuário pertence ao tenant correto
-        if user.tenant_id and str(user.tenant_id) != tenant_id:
+        # Verifica se usuário pertence ao tenant correto (skip se tenant_id não resolvido)
+        if user.tenant_id and tenant_id is not None and str(user.tenant_id) != tenant_id:
             raise serializers.ValidationError({
                 'detail': 'Email ou senha incorretos.'
             }, code='invalid_credentials')
@@ -57,13 +57,44 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    name = serializers.SerializerMethodField()
-    is_active = serializers.BooleanField(source='active')
-
-    def get_name(self, obj):
-        return obj.email.split('@')[0]
+    name = serializers.CharField(required=False, allow_blank=True)
+    is_active = serializers.BooleanField(source='active', required=False)
 
     class Meta:
         model = User
         fields = ['id', 'email', 'name', 'role', 'is_active', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+    def to_representation(self, obj):
+        rep = super().to_representation(obj)
+        if not rep.get('name'):
+            rep['name'] = obj.email.split('@')[0]
+        return rep
+
+
+class UserCreateSerializer(serializers.Serializer):
+    name = serializers.CharField(required=False, allow_blank=True, default='')
+    email = serializers.EmailField()
+    password = serializers.CharField(min_length=8, write_only=True)
+    role = serializers.ChoiceField(
+        choices=['operator', 'supervisor', 'city_admin', 'reseller_admin', 'super_admin'],
+        default='operator',
+    )
+    is_active = serializers.BooleanField(default=True)
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError('Email já cadastrado.')
+        return value
+
+    def create(self, validated_data):
+        validated_data.pop('name', '')
+        is_active = validated_data.pop('is_active', True)
+        password = validated_data.pop('password')
+        tenant_id = validated_data.pop('tenant_id', None)
+        return User.objects.create_user(
+            **validated_data,
+            password=password,
+            active=is_active,
+            tenant_id=tenant_id,
+        )

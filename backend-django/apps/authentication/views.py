@@ -8,10 +8,15 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.crypto import get_random_string
 from apps.auth_app.models import User
+from apps.authentication.permissions import RolePermission
 from .serializers import (
-    LoginSerializer, PasswordResetSerializer, 
-    PasswordResetConfirmSerializer, UserSerializer
+    LoginSerializer, PasswordResetSerializer,
+    PasswordResetConfirmSerializer, UserSerializer, UserCreateSerializer,
 )
+
+
+class CityAdminPermission(RolePermission):
+    allowed_roles = ['city_admin', 'reseller_admin', 'super_admin']
 
 
 class AuthViewSet(viewsets.GenericViewSet):
@@ -122,3 +127,103 @@ class AuthViewSet(viewsets.GenericViewSet):
         """GET /api/v1/auth/me/"""
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
+
+    # ── Users CRUD ────────────────────────────────────────────────────────────
+
+    @action(
+        detail=False, methods=['get'],
+        permission_classes=[IsAuthenticated, CityAdminPermission],
+        url_path='users',
+    )
+    def users_list(self, request):
+        """GET /api/v1/auth/users/"""
+        from rest_framework.pagination import PageNumberPagination
+        tenant_id = getattr(request, 'tenant_id', None)
+        qs = User.objects.filter(tenant_id=tenant_id).order_by('email')
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 20
+        page = paginator.paginate_queryset(qs, request)
+        serializer = UserSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    @action(
+        detail=False, methods=['post'],
+        permission_classes=[IsAuthenticated, CityAdminPermission],
+        url_path='users/create',
+    )
+    def users_create(self, request):
+        """POST /api/v1/auth/users/create/"""
+        tenant_id = getattr(request, 'tenant_id', None)
+        serializer = UserCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save(tenant_id=tenant_id)
+        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=False, methods=['patch'],
+        permission_classes=[IsAuthenticated, CityAdminPermission],
+        url_path=r'users/(?P<user_id>[^/.]+)/update',
+    )
+    def users_update(self, request, user_id=None):
+        """PATCH /api/v1/auth/users/{id}/update/"""
+        tenant_id = getattr(request, 'tenant_id', None)
+        try:
+            user = User.objects.get(id=user_id, tenant_id=tenant_id)
+        except User.DoesNotExist:
+            return Response({'detail': 'Não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        data = request.data.copy()
+        password = data.pop('password', None)
+
+        serializer = UserSerializer(user, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated_user = serializer.save()
+
+        if password:
+            updated_user.set_password(password)
+            updated_user.save()
+
+        return Response(UserSerializer(updated_user).data)
+
+    @action(
+        detail=False, methods=['delete'],
+        permission_classes=[IsAuthenticated, CityAdminPermission],
+        url_path=r'users/(?P<user_id>[^/.]+)/delete',
+    )
+    def users_delete(self, request, user_id=None):
+        """DELETE /api/v1/auth/users/{id}/delete/"""
+        tenant_id = getattr(request, 'tenant_id', None)
+        if str(request.user.id) == str(user_id):
+            return Response({'detail': 'Não é possível excluir o próprio usuário.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(id=user_id, tenant_id=tenant_id)
+            user.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except User.DoesNotExist:
+            return Response({'detail': 'Não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(
+        detail=False, methods=['patch'],
+        permission_classes=[IsAuthenticated],
+        url_path='users/me/update',
+    )
+    def me_update(self, request):
+        """PATCH /api/v1/auth/users/me/update/ — atualiza o próprio perfil"""
+        data = request.data.copy()
+        password = data.pop('new_password', None)
+        current_password = data.pop('current_password', None)
+
+        if password:
+            if not current_password or not request.user.check_password(current_password):
+                return Response({'detail': 'Senha atual incorreta.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = UserSerializer(request.user, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        if password:
+            user.set_password(password)
+            user.save()
+
+        return Response(UserSerializer(user).data)

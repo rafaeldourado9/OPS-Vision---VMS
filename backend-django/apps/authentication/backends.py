@@ -1,5 +1,21 @@
 from django.contrib.auth.backends import ModelBackend
 from apps.auth_app.models import User
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+
+
+class QueryStringJWTAuthentication(JWTAuthentication):
+    """Permite autenticação via ?token= na query string (para img.src, etc.)"""
+
+    def authenticate(self, request):
+        token = request.query_params.get('token') or request.GET.get('token')
+        if not token:
+            return super().authenticate(request)
+        try:
+            validated = self.get_validated_token(self.get_raw_token(f'Bearer {token}'.encode()))
+            return self.get_user(validated), validated
+        except (InvalidToken, TokenError):
+            return None
 
 
 class EmailBackend(ModelBackend):
