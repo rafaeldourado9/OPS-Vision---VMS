@@ -46,6 +46,12 @@ class RegionOfInterestViewSet(viewsets.ModelViewSet):
         self.publish_roi_updated(camera)
 
     @transaction.atomic
+    def perform_update(self, serializer):
+        """Atualiza ROI e republica roi.updated"""
+        roi = serializer.save()
+        self.publish_roi_updated(roi.camera)
+
+    @transaction.atomic
     def perform_destroy(self, instance):
         """Deleta ROI e verifica se deve mudar câmera para ia_pending"""
         camera = instance.camera
@@ -65,20 +71,33 @@ class RegionOfInterestViewSet(viewsets.ModelViewSet):
         try:
             import pika
             import os
-            
+
             rabbitmq_url = os.getenv('RABBITMQ_URL', 'amqp://guest:guest@rabbitmq:5672/')
+            mediamtx_internal = os.getenv('MEDIAMTX_HLS_INTERNAL', 'http://mediamtx:8888')
             connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
             channel = connection.channel()
-            
+
             channel.queue_declare(queue='roi.updated', durable=True)
-            
+
             rois = list(RegionOfInterest.objects.filter(
                 camera=camera, active=True
-            ).values('id', 'name', 'polygon', 'ia_type'))
-            
+            ).values('id', 'name', 'polygon', 'ia_type', 'ia_types', 'config'))
+
+            # Include detection masks
+            from apps.cameras.models import DetectionMask
+            masks = list(DetectionMask.objects.filter(
+                camera=camera, active=True
+            ).values('id', 'name', 'polygon'))
+
+            # Use MediaMTX URL instead of direct camera URL
+            mediamtx_url = f'rtsp://mediamtx:8554/live/{camera.tenant_id}/{camera.id}'
+
             message = {
                 'camera_id': str(camera.id),
-                'roi_list': rois
+                'tenant_id': str(camera.tenant_id),
+                'stream_url': mediamtx_url,
+                'roi_list': rois,
+                'masks': masks,
             }
             
             channel.basic_publish(
