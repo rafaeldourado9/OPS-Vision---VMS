@@ -38,7 +38,7 @@ class EventConsumer:
                     'camera_id': str(event.camera_id),
                     'event_type': event.event_type,
                     'event_data': event.event_data,
-                    'detected_at': event.detected_at.isoformat()
+                    'detected_at': event.detected_at.isoformat() if hasattr(event.detected_at, 'isoformat') else str(event.detected_at)
                 }
             }
         )

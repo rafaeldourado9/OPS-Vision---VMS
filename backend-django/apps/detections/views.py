@@ -28,11 +28,12 @@ class AIEventViewSet(viewsets.ReadOnlyModelViewSet):
         if event_type:
             queryset = queryset.filter(event_type=event_type)
         
-        start_date = self.request.query_params.get('start_date')
+        # Suporta start_date/end_date e started_after/started_before (alias frontend)
+        start_date = self.request.query_params.get('start_date') or self.request.query_params.get('started_after')
         if start_date:
             queryset = queryset.filter(detected_at__gte=start_date)
-        
-        end_date = self.request.query_params.get('end_date')
+
+        end_date = self.request.query_params.get('end_date') or self.request.query_params.get('started_before')
         if end_date:
             queryset = queryset.filter(detected_at__lte=end_date)
         

@@ -6,9 +6,21 @@ class AIEvent(models.Model):
     """Evento detectado pela IA"""
     
     EVENT_TYPE_CHOICES = [
+        # Sprint 1
         ('lpr', 'Reconhecimento de Placa'),
-        ('intrusion', 'Intrusão'),
         ('crowd', 'Aglomeração'),
+        ('intrusion', 'Intrusão'),
+        ('object_detected', 'Objeto Detectado'),
+        # Sprint 2 (tracking)
+        ('vehicle_traffic', 'Tráfego de Veículos'),
+        ('human_traffic', 'Tráfego Humano'),
+        ('line_crossing', 'Cruzamento de Linha'),
+        ('loitering', 'Perambulação'),
+        ('abandoned_object', 'Objeto Abandonado'),
+        ('queue_alert', 'Alerta de Fila'),
+        # Sprint 3
+        ('facial_match', 'Reconhecimento Facial - Match'),
+        ('facial_unknown', 'Pessoa Desconhecida'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
