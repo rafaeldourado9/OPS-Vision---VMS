@@ -75,14 +75,27 @@ def publish_rabbitmq(queue_name, message: dict):
 
 @receiver(post_save, sender='cameras.Camera')
 def camera_post_save(sender, instance, created, **kwargs):
+    update_fields = kwargs.get('update_fields')
+    if update_fields and set(update_fields).issubset({'online', 'last_seen'}):
+        return
+
     if instance.stream_protocol == 'rtsp' and instance.stream_url:
         add_mediamtx_path(instance)
-        if created:
-            publish_rabbitmq('recording.start', {
-                'camera_id': str(instance.id),
-                'tenant_id': str(instance.tenant_id),
-                'stream_url': instance.stream_url,
-            })
+        
+        # Use MediaMTX URL instead of direct camera URL
+        mediamtx_url = f'rtsp://mediamtx:8554/{get_path_name(instance)}'
+        
+        publish_rabbitmq('recording.start', {
+            'camera_id': str(instance.id),
+            'tenant_id': str(instance.tenant_id),
+            'stream_url': mediamtx_url,
+        })
+        # Ativa frame grabber (captura thumbnails mesmo sem ROIs)
+        publish_rabbitmq('camera.activated', {
+            'camera_id': str(instance.id),
+            'tenant_id': str(instance.tenant_id),
+            'stream_url': mediamtx_url,
+        })
 
 
 @receiver(post_delete, sender='cameras.Camera')

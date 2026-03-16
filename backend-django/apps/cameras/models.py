@@ -52,11 +52,31 @@ class Camera(models.Model):
         # Gera stream_key para RTMP
         if self.stream_protocol == 'rtmp' and not self.stream_key:
             self.stream_key = uuid.uuid4()
-        
+
         # Atualiza ia_status baseado em ia_enabled
         if self.ia_enabled and self.ia_status == 'disabled':
             self.ia_status = 'ia_pending'
         elif not self.ia_enabled:
             self.ia_status = 'disabled'
-        
+
         super().save(*args, **kwargs)
+
+
+class DetectionMask(models.Model):
+    """Máscara de detecção para ignorar áreas da imagem."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE, related_name='detection_masks')
+    camera = models.ForeignKey('cameras.Camera', on_delete=models.CASCADE, related_name='detection_masks')
+    polygon = models.JSONField(help_text='Lista de pontos [[x, y], ...]')
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'detection_masks'
+        indexes = [
+            models.Index(fields=['tenant', 'camera']),
+            models.Index(fields=['camera', 'active']),
+        ]
+
+    def __str__(self):
+        return f"DetectionMask {self.id} ({self.camera.name})"

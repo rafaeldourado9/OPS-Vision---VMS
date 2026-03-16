@@ -23,17 +23,24 @@ class Command(BaseCommand):
             return
 
         try:
+            from apps.roi.models import RegionOfInterest
+            
             params = pika.URLParameters(RABBITMQ_URL)
             connection = pika.BlockingConnection(params)
             channel = connection.channel()
             channel.queue_declare(queue='recording.start', durable=True)
+            channel.queue_declare(queue='camera.activated', durable=True)
+            channel.queue_declare(queue='roi.updated', durable=True)
 
             count = 0
             for cam in cameras:
+                # Use MediaMTX URL instead of direct camera URL
+                mediamtx_url = f'rtsp://mediamtx:8554/live/{cam.tenant_id}/{cam.id}'
+                
                 message = {
                     'camera_id': str(cam.id),
                     'tenant_id': str(cam.tenant_id),
-                    'stream_url': cam.stream_url,
+                    'stream_url': mediamtx_url,
                 }
                 channel.basic_publish(
                     exchange='',
@@ -41,9 +48,36 @@ class Command(BaseCommand):
                     body=json.dumps(message),
                     properties=pika.BasicProperties(delivery_mode=2),
                 )
+                channel.basic_publish(
+                    exchange='',
+                    routing_key='camera.activated',
+                    body=json.dumps(message),
+                    properties=pika.BasicProperties(delivery_mode=2),
+                )
+                
+                # Publica roi.updated com as ROIs ativas da câmera
+                rois = list(RegionOfInterest.objects.filter(
+                    camera=cam, active=True
+                ).values('id', 'name', 'polygon', 'ia_type', 'ia_types', 'config'))
+                
+                roi_message = {
+                    'camera_id': str(cam.id),
+                    'tenant_id': str(cam.tenant_id),
+                    'stream_url': mediamtx_url,
+                    'roi_list': rois,
+                }
+                channel.basic_publish(
+                    exchange='',
+                    routing_key='roi.updated',
+                    body=json.dumps(roi_message, default=str),
+                    properties=pika.BasicProperties(delivery_mode=2),
+                )
+                
                 count += 1
 
             connection.close()
-            self.stdout.write(self.style.SUCCESS(f'{count} mensagens recording.start publicadas.'))
+            self.stdout.write(self.style.SUCCESS(
+                f'{count} câmeras: recording.start + camera.activated + roi.updated publicados.'
+            ))
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'RabbitMQ indisponível: {e}'))
