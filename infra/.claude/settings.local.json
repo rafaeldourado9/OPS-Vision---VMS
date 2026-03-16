@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l \"D:\\\\VMS \\(White Label\\)\\\\viseron-dev\\\\viseron\\\\components\\\\storage\\\\tier_handler.py\")",
+      "Bash(find \"D:/VMS \\(White Label\\)/viseron-dev/viseron/components/mog2\" -type f -name \"*.py\" 2>/dev/null)",
+      "Bash(find \"D:/VMS \\(White Label\\)/viseron-dev/viseron/domains\" -type f -name \"*.py\" 2>/dev/null | grep -E \"\\(motion_detector|object_detector\\)\" | head -20)",
+      "Bash(find \"D:\\\\VMS \\(White Label\\)\\\\viseron-dev\\\\viseron\\\\domains\\\\camera\" -type f -name \"*.py\" | head -20)"
+    ]
+  }
+}

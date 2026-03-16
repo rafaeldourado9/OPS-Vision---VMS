@@ -1,51 +1,144 @@
-version: '3.8'
-
 services:
   django:
     build: ../backend-django
+    restart: always
     command: >
       sh -c "python manage.py migrate --noinput &&
+             python manage.py setup_storage_policies &&
              python manage.py sync_mediamtx &
+             python manage.py consume_ai_events &
              daphne -b 0.0.0.0 -p 8000 gtvision.asgi:application"
     volumes:
       - ../backend-django:/app
+      - ../storage:/app/storage        # heatmaps, media, snapshots
       - django-static:/app/staticfiles
-    ports:
-      - "8000:8000"
     env_file:
       - ../backend-django/.env
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - gtvision
 
-  ai-worker:
+  yolo-worker:
     build:
-      context: ../backend-fastapi/workers/ai_worker
-      dockerfile: Dockerfile.ai
+      context: ../backend-fastapi/workers
+      dockerfile: yolo_worker/Dockerfile.worker
+    restart: unless-stopped
     volumes:
-      - ../models:/app/models:ro
+      - ../backend-fastapi/workers/common:/app/common
       - ../storage:/app/storage
+      - ../models:/app/models:ro
+    env_file:
+      - ../backend-fastapi/workers/.env
     environment:
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - DEDUP_TTL_SECONDS=30
       - REDIS_URL=redis://redis:6379/0
-      - MODEL_PLATE_DETECTOR=/app/models/plate_detector.pt
-      - MODEL_CHAR_RECOGNIZER=/app/models/char_recognizer.pt
-      - STORAGE_PATH=/app/storage
-      - DJANGO_INTERNAL_URL=http://django:8000
     depends_on:
-      - rabbitmq
-      - redis
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - gtvision
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  facial-worker:
+    build:
+      context: ../backend-fastapi/workers
+      dockerfile: facial_worker/Dockerfile.worker
+    container_name: facial_worker
+    restart: unless-stopped
+    volumes:
+      - ../backend-fastapi/workers/common:/app/common
+      - ../storage:/app/storage
+      - ../models:/app/models:ro
+      - ai-insightface-cache:/root/.insightface
+    env_file:
+      - ../backend-fastapi/workers/.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - gtvision
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  unified-analytic-worker:
+    build:
+      context: ../backend-fastapi/workers
+      dockerfile: analytic_workers/Dockerfile.worker
+    restart: unless-stopped
+    volumes:
+      - ../backend-fastapi/workers/common:/app/common
+      - ../storage:/app/storage
+      - ../models:/app/models:ro
+    env_file:
+      - ../backend-fastapi/workers/.env
+    environment:
+      - DEDUP_TTL_SECONDS=30
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - gtvision
+    command: ["python", "-m", "analytic_workers.unified_worker"]
+
+  lpr-worker:
+    build:
+      context: ../backend-fastapi/workers
+      dockerfile: lpr_worker/Dockerfile.worker
+    restart: unless-stopped
+    volumes:
+      - ../backend-fastapi/workers/lpr_worker/worker:/app/worker
+      - ../backend-fastapi/workers/common:/app/common
+      - ../storage:/app/storage
+      - ../models:/app/models:ro
+    env_file:
+      - ../backend-fastapi/workers/.env
+    deploy:
+      replicas: 2
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - gtvision
 
   recorder-worker:
     build:
-      context: ../backend-fastapi/workers/recorder
-      dockerfile: Dockerfile.worker
+      context: ../backend-fastapi/workers
+      dockerfile: recorder/Dockerfile.worker
+    restart: unless-stopped
     volumes:
+      - ../backend-fastapi/workers/recorder/worker:/app/worker
+      - ../backend-fastapi/workers/common:/app/common
       - ../storage:/app/storage
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
@@ -53,36 +146,66 @@ services:
       - STORAGE_PATH=/app/storage
       - MEDIAMTX_URL=http://mediamtx:8888
       - DJANGO_INTERNAL_URL=http://django:8000
+      - SEGMENT_DURATION=${SEGMENT_DURATION:-60}
+      - HEALTH_TIMEOUT=30
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9100/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
-      - rabbitmq
-      - redis
-      - mediamtx
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started
+      django:
+        condition: service_started
     networks:
       - gtvision
 
   frame-grabber:
     build:
-      context: ../backend-fastapi/workers/frame_grabber
-      dockerfile: Dockerfile.worker
+      context: ../backend-fastapi/workers
+      dockerfile: frame_grabber/Dockerfile.worker
+    restart: unless-stopped
+    deploy:
+      replicas: 1    # 1 instance sufficient for ≤20 cameras
     volumes:
+      - ../backend-fastapi/workers/frame_grabber/worker:/app/worker
+      - ../backend-fastapi/workers/common:/app/common
       - ../storage:/app/storage
     environment:
+      - PYTHONUNBUFFERED=1
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - REDIS_URL=redis://redis:6379/0
       - STORAGE_PATH=/app/storage
       - MEDIAMTX_URL=http://mediamtx:8888
+      - USE_REDIS_CACHE=0
+      - USE_CAMERA_SHARDING=0
+      - MAX_CAMERAS_PER_INSTANCE=50
+      - FRAME_INTERVAL=0.33
+      - MOTION_THRESHOLD=0.5
+      - DJANGO_INTERNAL_URL=http://django:8000
+      - INTERNAL_SECRET=internal-secret-change-me
     depends_on:
-      - rabbitmq
-      - redis
-      - mediamtx
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started
     networks:
       - gtvision
 
   clip-builder:
     build:
-      context: ../backend-fastapi/workers/clip_builder
-      dockerfile: Dockerfile.worker
+      context: ../backend-fastapi/workers
+      dockerfile: clip_builder/Dockerfile.worker
+    restart: unless-stopped
     volumes:
+      - ../backend-fastapi/workers/common:/app/common
       - ../storage:/app/storage
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
@@ -90,23 +213,31 @@ services:
       - STORAGE_PATH=/app/storage
       - DJANGO_INTERNAL_URL=http://django:8000
     depends_on:
-      - rabbitmq
-      - redis
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - gtvision
 
   purge-worker:
     build:
-      context: ../backend-fastapi/workers/purge
-      dockerfile: Dockerfile.worker
+      context: ../backend-fastapi/workers
+      dockerfile: purge/Dockerfile.worker
+    restart: unless-stopped
     volumes:
+      - ../backend-fastapi/workers/common:/app/common
       - ../storage:/app/storage
+      - cold-storage:/app/storage/cold    # Tier 1: cold storage
     environment:
       - REDIS_URL=redis://redis:6379/0
       - STORAGE_PATH=/app/storage
       - DJANGO_INTERNAL_URL=http://django:8000
     depends_on:
-      - redis
+      django:
+        condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - gtvision
 
@@ -116,7 +247,7 @@ services:
       - ./mediamtx.yml:/mediamtx.yml
     ports:
       - "8554:8554"   # RTSP
-      - "1935:1935"   # RTMP
+      - "2935:1935"   # RTMP (host 2935 → container 1935, 1935 blocked by Hyper-V)
       - "8889:8889"   # WebRTC
       - "8888:8888"   # HLS
       - "9996:9996"   # Playback
@@ -134,6 +265,11 @@ services:
       - postgres-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gtvision"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - gtvision
 
@@ -143,6 +279,11 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - gtvision
 
@@ -156,6 +297,11 @@ services:
       - "15672:15672"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
     networks:
       - gtvision
 
@@ -164,6 +310,7 @@ services:
     command: sh -c "sleep 15 && python manage.py start_recordings && python manage.py sync_mediamtx --watch"
     volumes:
       - ../backend-django:/app
+      - ../storage:/app/storage
     env_file:
       - ../backend-django/.env
     depends_on:
@@ -172,21 +319,32 @@ services:
     networks:
       - gtvision
 
-  frontend:
-    build: ../frontend
-    networks:
-      - gtvision
-
   nginx:
     image: nginx:alpine
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - django-static:/usr/share/nginx/html/static
+    restart: always
     ports:
       - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../storage:/app/storage:ro
     depends_on:
       - django
       - frontend
+      - mediamtx
+    networks:
+      - gtvision
+
+  frontend:
+    build:
+      context: ../frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_WS_URL: ${VITE_WS_URL:-}
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
+    volumes:
+      - django-static:/usr/share/nginx/html/django-static:ro
+    depends_on:
+      - django
       - mediamtx
     networks:
       - gtvision
@@ -196,6 +354,9 @@ volumes:
   redis-data:
   rabbitmq-data:
   django-static:
+  ai-model-cache:
+  ai-insightface-cache:
+  cold-storage:         # Tier 1: cold storage para recordings antigos
 
 networks:
   gtvision:

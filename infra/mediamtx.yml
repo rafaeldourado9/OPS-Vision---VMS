@@ -74,10 +74,10 @@ hlsAddress: :8888
 hlsEncryption: no
 hlsAllowOrigins: ['*']
 hlsVariant: fmp4
-hlsSegmentCount: 3
-hlsSegmentDuration: 2s
-hlsSegmentMaxSize: 10M
-hlsMuxerCloseAfter: 60s
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsSegmentMaxSize: 50M
+hlsMuxerCloseAfter: 120s
 hlsPartDuration: 200ms
 
 ###############################################
