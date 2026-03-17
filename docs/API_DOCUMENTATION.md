@@ -1,6 +1,6 @@
 # VMS API Documentation
 
-> Última atualização: 2026-03-15 — Fases 1–5 completas
+> Última atualização: 2026-03-16 — Fase 8 Analytics Service
 
 ## Índice
 
@@ -11,6 +11,7 @@
 5. [Eventos](#5-eventos)
 6. [Gravações](#6-gravações)
 7. [Health Check](#7-health-check)
+8. [Analytics](#8-analytics)
 
 ---
 
@@ -719,6 +720,356 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost/api/v1/health/ | grep -q
 
 ---
 
+## 8. Analytics
+
+Base URL: `/api/v1/analytics/`
+
+O módulo analytics é composto por dois subsistemas:
+- **ROI + DwellEvents** — CRUD e leitura para usuários (JWT)
+- **Ingest + ROI internos** — usados pelo `analytics_service` (API key interna)
+
+### 8.1 Esquema de Autenticação Interna
+
+O `analytics_service` autentica usando um header customizado:
+
+```
+Authorization: Analytics <ANALYTICS_SERVICE_API_KEY>
+```
+
+A chave deve ser idêntica nos dois containers. Configure em `.env`:
+
+```bash
+ANALYTICS_SERVICE_API_KEY=sua-chave-secreta-longa
+```
+
+> Estes endpoints (`/ingest/` e `/internal/rois/`) recusam JWT. São exclusivos para comunicação máquina-a-máquina.
+
+---
+
+### 8.2 Regions of Interest (ROI)
+
+Base URL: `/api/v1/analytics/rois/`
+Auth: JWT Bearer
+
+ROIs são zonas desenhadas sobre o campo de visão de uma câmera. Cada ROI tem um `ia_type` que define qual plugin de analytics a processa.
+
+#### Campos
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|-------------|-----------|
+| `id` | int | leitura | |
+| `camera` | int | sim | ID da câmera |
+| `name` | string | sim | Nome descritivo (ex: "Vaga VIP 1") |
+| `ia_type` | enum | sim | Tipo de análise (ver tabela abaixo) |
+| `polygon_points` | array | sim | `[[x, y], ...]` normalizados 0.0–1.0 |
+| `config` | object | não | Parâmetros extras do plugin |
+| `is_active` | bool | não | `true` (default) |
+| `created_at` | datetime | leitura | |
+| `updated_at` | datetime | leitura | |
+
+**Valores de `ia_type`:**
+
+| Valor | Descrição | Plugin |
+|-------|-----------|--------|
+| `vehicle_dwell` | Permanência veicular | `vehicle_dwell` |
+| `intrusion` | Intrusão em zona proibida | `intrusion_detection` |
+| `human_traffic` | Contagem de pessoas | `people_count` |
+| `vehicle_traffic` | Contagem de veículos | `vehicle_count` |
+| `lpr` | Leitura de placas server-side | `lpr_parking` |
+| `facial` | Reconhecimento facial (LGPD opt-in) | `face_recognition` |
+
+#### Listar ROIs
+
+```
+GET /api/v1/analytics/rois/
+GET /api/v1/analytics/rois/?camera=5
+```
+
+```bash
+curl -s "http://localhost/api/v1/analytics/rois/?camera=5" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+```json
+[
+  {
+    "id": 3,
+    "camera": 5,
+    "name": "Vaga VIP 1",
+    "ia_type": "vehicle_dwell",
+    "polygon_points": [[0.1, 0.2], [0.4, 0.2], [0.4, 0.8], [0.1, 0.8]],
+    "config": {},
+    "is_active": true,
+    "created_at": "2026-03-16T09:00:00Z",
+    "updated_at": "2026-03-16T09:00:00Z"
+  }
+]
+```
+
+#### Criar ROI
+
+```
+POST /api/v1/analytics/rois/
+```
+
+```bash
+curl -s -X POST http://localhost/api/v1/analytics/rois/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "camera": 5,
+    "name": "Vaga VIP 1",
+    "ia_type": "vehicle_dwell",
+    "polygon_points": [
+      [0.1, 0.2],
+      [0.4, 0.2],
+      [0.4, 0.8],
+      [0.1, 0.8]
+    ],
+    "config": {}
+  }' | jq .
+```
+
+> **Coordenadas normalizadas:** `x` e `y` são frações da largura e altura do frame (0.0 = borda esquerda/superior, 1.0 = borda direita/inferior). O frontend ROI Editor converte coordenadas de pixel para normalizadas automaticamente.
+
+#### Atualizar ROI (parcial)
+
+```
+PATCH /api/v1/analytics/rois/{id}/
+```
+
+```bash
+# Desativar ROI sem deletar
+curl -s -X PATCH http://localhost/api/v1/analytics/rois/3/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"is_active": false}'
+```
+
+#### Deletar ROI
+
+```
+DELETE /api/v1/analytics/rois/{id}/
+```
+
+---
+
+### 8.3 Dwell Events
+
+Base URL: `/api/v1/analytics/dwell-events/`
+Auth: JWT Bearer — somente leitura
+
+Eventos de permanência veicular gerados pelo plugin `vehicle_dwell`. Um evento é criado quando um veículo entra em uma ROI e atualizado quando sai.
+
+#### Campos
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `id` | int | |
+| `camera` | int | ID da câmera |
+| `camera_name` | string | Nome da câmera |
+| `tenant` | int | ID do tenant |
+| `roi` | int \| null | ID da ROI onde ocorreu |
+| `roi_name` | string \| null | Nome da ROI |
+| `track_id` | int | ID do veículo pelo tracker |
+| `entered_at` | datetime | Momento de entrada na ROI |
+| `exited_at` | datetime \| null | Momento de saída (null = em andamento) |
+| `dwell_seconds` | int \| null | Duração em segundos |
+| `frame_path` | string | Caminho do snapshot de entrada |
+| `is_valid` | bool \| null | `true` = 60–240s; `false` = fora do range; `null` = em andamento |
+| `created_at` | datetime | |
+
+#### Listar eventos
+
+```
+GET /api/v1/analytics/dwell-events/
+```
+
+**Filtros disponíveis:**
+
+| Parâmetro | Exemplo | Descrição |
+|-----------|---------|-----------|
+| `camera` | `5` | Filtrar por câmera |
+| `is_valid` | `true` | Apenas permanências válidas (60–240s) |
+| `date_from` | `2026-03-16` | A partir de (data, YYYY-MM-DD) |
+| `date_to` | `2026-03-16` | Até (data, YYYY-MM-DD) |
+
+```bash
+# Permanências válidas de hoje
+curl -s "http://localhost/api/v1/analytics/dwell-events/?is_valid=true&date_from=2026-03-16" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+```json
+{
+  "count": 2,
+  "results": [
+    {
+      "id": 1,
+      "camera": 5,
+      "camera_name": "Estacionamento B2",
+      "tenant": 1,
+      "roi": 3,
+      "roi_name": "Vaga VIP 1",
+      "track_id": 42,
+      "entered_at": "2026-03-16T10:00:00Z",
+      "exited_at": "2026-03-16T10:02:30Z",
+      "dwell_seconds": 150,
+      "frame_path": "/recordings/snapshots/cam5_track42.jpg",
+      "is_valid": true,
+      "created_at": "2026-03-16T10:00:01Z"
+    }
+  ]
+}
+```
+
+```bash
+# Veículos ainda estacionados (sem saída registrada)
+curl -s "http://localhost/api/v1/analytics/dwell-events/?is_valid=null" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+---
+
+### 8.4 Dashboard Analytics
+
+Auth: JWT Bearer
+
+#### Estatísticas gerais
+
+```
+GET /api/v1/dashboard/stats/
+```
+
+```bash
+curl -s http://localhost/api/v1/dashboard/stats/ \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+```json
+{
+  "total_cameras": 12,
+  "online_cameras": 10,
+  "offline_cameras": 2,
+  "total_events_today": 47,
+  "dwell_events_today": 8,
+  "total_clips": 0,
+  "events_by_type_today": {
+    "detection.alpr": 31,
+    "analytics.vehicle.dwell": 8,
+    "camera.offline": 2
+  }
+}
+```
+
+#### Eventos por hora (últimas 24h)
+
+```
+GET /api/v1/dashboard/events-by-hour/
+```
+
+```bash
+curl -s http://localhost/api/v1/dashboard/events-by-hour/ \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+```json
+[
+  {"hour": "08h", "events": 0},
+  {"hour": "09h", "events": 5},
+  {"hour": "10h", "events": 12},
+  ...
+]
+```
+
+---
+
+### 8.5 Ingest (uso interno — analytics_service)
+
+```
+POST /api/v1/analytics/ingest/
+Authorization: Analytics <ANALYTICS_SERVICE_API_KEY>
+```
+
+Endpoint usado exclusivamente pelo `analytics_service` para enviar resultados de plugins ao Django. Não deve ser chamado por usuários.
+
+**Body:**
+
+```json
+{
+  "plugin":     "vehicle_dwell",
+  "camera_id":  5,
+  "tenant_id":  1,
+  "event_type": "analytics.vehicle.dwell",
+  "payload": {
+    "track_id":      42,
+    "roi_id":         3,
+    "entered_at":    "2026-03-16T10:00:00+00:00",
+    "exited_at":     "2026-03-16T10:02:30+00:00",
+    "dwell_seconds": 150,
+    "frame_path":    "/recordings/snapshots/cam5_track42.jpg",
+    "is_valid":      true
+  }
+}
+```
+
+**Respostas:**
+
+| Status | Situação |
+|--------|----------|
+| `202 Accepted` | Evento recebido e processado |
+| `400 Bad Request` | Campos obrigatórios ausentes |
+| `401 Unauthorized` | API key ausente ou inválida |
+| `422 Unprocessable Entity` | Plugin desconhecido |
+
+---
+
+### 8.6 ROIs internas (uso interno — analytics_service)
+
+```
+GET /api/v1/analytics/internal/rois/?camera={camera_id}
+Authorization: Analytics <ANALYTICS_SERVICE_API_KEY>
+```
+
+Retorna ROIs ativas de uma câmera para consumo pelo `analytics_service`. Não requer JWT.
+
+```bash
+# analytics_service chama internamente:
+curl -s "http://django:8000/api/v1/analytics/internal/rois/?camera=5" \
+  -H "Authorization: Analytics $ANALYTICS_SERVICE_API_KEY" | jq .
+```
+
+```json
+[
+  {
+    "id": 3,
+    "name": "Vaga VIP 1",
+    "ia_type": "vehicle_dwell",
+    "polygon_points": [[0.1, 0.2], [0.4, 0.2], [0.4, 0.8], [0.1, 0.8]],
+    "config": {}
+  }
+]
+```
+
+---
+
+### 8.7 SSE — Eventos de analytics em tempo real
+
+Eventos de analytics são publicados no canal Redis `vms:realtime` e chegam ao frontend via SSE. Conecte ao stream da mesma forma que outros eventos:
+
+```javascript
+const es = new EventSource(`/sse/?token=${jwt}`);
+es.onmessage = (e) => {
+  const data = JSON.parse(e.data);
+  if (data.type === 'dwell_event') {
+    console.log('Novo evento de dwell:', data);
+    // { type, tenant_id, camera_id, track_id, event_id, is_valid, dwell_seconds }
+  }
+};
+```
+
+---
+
 ## Apêndice A — Mapa de Endpoints
 
 | Método | Endpoint | Auth | Descrição |
@@ -749,4 +1100,14 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost/api/v1/health/ | grep -q
 | GET | `/api/v1/agents/me/config/` | Agent | Config de câmeras |
 | POST | `/api/v1/agents/me/heartbeat/` | Agent | Enviar heartbeat |
 | POST | `/webhooks/alpr/{manufacturer}/` | — | ALPR câmera inteligente |
-| GET | `/sse/events/` | JWT | Server-Sent Events |
+| GET | `/sse/` | JWT (query param) | Server-Sent Events |
+| GET | `/api/v1/analytics/rois/` | JWT | Listar ROIs |
+| POST | `/api/v1/analytics/rois/` | JWT | Criar ROI |
+| GET/PUT/PATCH | `/api/v1/analytics/rois/{id}/` | JWT | Detalhe/atualizar ROI |
+| DELETE | `/api/v1/analytics/rois/{id}/` | JWT | Deletar ROI |
+| GET | `/api/v1/analytics/dwell-events/` | JWT | Listar eventos de dwell |
+| GET | `/api/v1/analytics/dwell-events/{id}/` | JWT | Detalhe do evento |
+| GET | `/api/v1/dashboard/stats/` | JWT | Estatísticas do dashboard |
+| GET | `/api/v1/dashboard/events-by-hour/` | JWT | Eventos por hora (24h) |
+| POST | `/api/v1/analytics/ingest/` | Analytics key | Ingest interno (analytics_service) |
+| GET | `/api/v1/analytics/internal/rois/` | Analytics key | ROIs internas (analytics_service) |
