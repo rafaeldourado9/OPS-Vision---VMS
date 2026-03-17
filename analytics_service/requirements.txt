@@ -1,0 +1,5 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+aiohttp>=3.10
+redis[asyncio]>=5.0
+supervision>=0.21
