@@ -1,0 +1,18 @@
+{
+  "vehicle_id": "bea97bd99ced",
+  "plate": "GGL3C55__",
+  "camera_id": "14",
+  "timestamp": "2026-02-07T14:56:34.914498",
+  "confidence": 0.25,
+  "detection_class": "license_plate",
+  "model": "N/A",
+  "brand": "N/A",
+  "bbox": {
+    "x1": 560,
+    "y1": 518,
+    "x2": 654,
+    "y2": 559
+  },
+  "photo": "GGL3C55___20260207_145634.jpg",
+  "plate_snapshot": "GGL3C55___plate.jpg"
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "gtvision_vms",
+    "api_url": "http://192.168.0.102:9997/v3/paths/list",
+    "username": "mediamtx_api_user",
+    "password": "GtV!sionMed1aMTX$2025",
+    "enabled": true
+  },
+  {
+    "id": "cliente_abc",
+    "api_url": "http://10.0.0.50:9997/v3/paths/list",
+    "username": "user_abc",
+    "password": "pass_abc",
+    "enabled": true
+  },
+  {
+    "id": "cliente_xyz",
+    "api_url": "http://10.0.0.51:9997/v3/paths/list",
+    "username": "user_xyz",
+    "password": "pass_xyz",
+    "enabled": false
+  }
+]

@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: vms-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vms-core
+    ports:
+      - "8001:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MEDIAMTX_API_USER=mediamtx_api_user
+      - MEDIAMTX_API_PASS=GtV!sionMed1aMTX$$2025
+      - FPS=5
+      - TORCH_FORCE_WEIGHTS_ONLY_LOAD=0
+    depends_on:
+      - redis
+    restart: unless-stopped
+    volumes:
+      - ./services:/app/services
+      - ./config:/app/config
+      - ./services/ai-processor/snapshots:/app/services/ai-processor/snapshots
+
+volumes:
+  redis_data:

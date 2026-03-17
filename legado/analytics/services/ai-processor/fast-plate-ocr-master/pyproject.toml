@@ -1,0 +1,159 @@
+[project]
+name = "fast-plate-ocr"
+version = "1.0.1"
+description = "Fast & Lightweight OCR for vehicle license plates."
+authors = [{ name = "ankandrew", email = "61120139+ankandrew@users.noreply.github.com" }]
+requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
+keywords = [
+    "plate-recognition",
+    "license-plate-recognition",
+    "license-plate-ocr",
+]
+classifiers = [
+    "Typing :: Typed",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "numpy>=1.20",
+    "opencv-python",
+    "pyyaml>=5.1",
+    "tqdm",
+    "rich",
+]
+
+[project.optional-dependencies]
+onnx = ["onnxruntime"]
+onnx-gpu = ["onnxruntime-gpu"]
+onnx-openvino = ["onnxruntime-openvino"]
+onnx-directml = ["onnxruntime-directml"]
+onnx-qnn = ["onnxruntime-qnn"]
+train = [
+    "albumentations",
+    "click",
+    "coremltools",
+    "keras>=3.10.0,<4",
+    "matplotlib",
+    "onnxslim>=0.1.56",
+    "pandas",
+    "pydantic>=2.5.2,<3",
+    "scikit-learn",
+    "tensorboard",
+    "tensorflow",
+    "tf2onnx",
+]
+
+[project.urls]
+Repository = "https://github.com/ankandrew/fast-plate-ocr/"
+Documentation = "https://ankandrew.github.io/fast-plate-ocr"
+
+[project.scripts]
+fast-plate-ocr = "fast_plate_ocr.cli.cli:main_cli"
+
+[dependency-groups]
+test = ["pytest"]
+dev = [
+    "mypy",
+    "ruff",
+    "pandas-stubs",
+    "pylint",
+    "types-pyyaml",
+    "yamllint",
+]
+docs = [
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mike",
+]
+
+[tool.uv]
+default-groups = [
+    "test",
+    "dev",
+    "docs",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    "W",
+    # Pyflakes
+    "F",
+    # pep8-naming
+    "N",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # flake8-unused-arguments
+    "ARG",
+    # Pylint
+    "PL",
+    # Perflint
+    "PERF",
+    # Ruff-specific rules
+    "RUF",
+    # pandas-vet
+    "PD",
+]
+ignore = ["N812", "PLR2004", "PD011"]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.pylint]
+max-args = 8
+
+[tool.ruff.format]
+line-ending = "lf"
+
+[tool.mypy]
+disable_error_code = "import-untyped"
+
+[[tool.mypy.overrides]]
+module = ["albumentations"]
+ignore_missing_imports = true
+
+[tool.pylint.typecheck]
+generated-members = ["cv2.*"]
+signature-mutators = [
+    "click.decorators.option",
+    "click.decorators.argument",
+    "click.decorators.version_option",
+    "click.decorators.help_option",
+    "click.decorators.pass_context",
+    "click.decorators.confirmation_option"
+]
+
+[tool.pylint.format]
+max-line-length = 100
+
+[tool.pylint."messages control"]
+disable = ["missing-class-docstring", "missing-function-docstring", "wrong-import-order", "duplicate-code"]
+
+[tool.pylint.design]
+max-args = 8
+min-public-methods = 1
+
+[tool.pylint.basic]
+no-docstring-rgx = "^__|^test_"

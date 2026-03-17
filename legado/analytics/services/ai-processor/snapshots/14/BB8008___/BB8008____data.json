@@ -1,0 +1,18 @@
+{
+  "vehicle_id": "90b259d02ba8",
+  "plate": "BB8008___",
+  "camera_id": "14",
+  "timestamp": "2026-02-07T14:52:33.003457",
+  "confidence": 0.25,
+  "detection_class": "license_plate",
+  "model": "N/A",
+  "brand": "N/A",
+  "bbox": {
+    "x1": 190,
+    "y1": 390,
+    "x2": 280,
+    "y2": 437
+  },
+  "photo": "BB8008____20260207_145232.jpg",
+  "plate_snapshot": "BB8008____plate.jpg"
+}

@@ -1,0 +1,8 @@
+{
+  "alpr": {
+    "model_path": "services/alpr/models/best.pt",
+    "confidence_threshold": 0.5,
+    "show_preview": true,
+    "save_snapshots": true
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "vehicle_id": "b20bb9c00d18",
+  "plate": "OOU7B94",
+  "camera_id": "20",
+  "timestamp": "2026-02-07T16:16:39.971475",
+  "confidence": 0.3,
+  "detection_class": "license_plate",
+  "model": "yolov8n",
+  "brand": "N/A",
+  "bbox": {
+    "x1": 474,
+    "y1": 785,
+    "x2": 596,
+    "y2": 848
+  },
+  "photo": "OOU7B94_20260207_161639.jpg",
+  "plate_snapshot": "OOU7B94_plate.jpg"
+}

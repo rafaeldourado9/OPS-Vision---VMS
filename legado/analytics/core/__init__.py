@@ -1,0 +1,1 @@
+"""Core package - Infrastructure layer"""

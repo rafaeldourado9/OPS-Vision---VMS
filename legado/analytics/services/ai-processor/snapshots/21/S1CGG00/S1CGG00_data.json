@@ -1,0 +1,18 @@
+{
+  "vehicle_id": "8e18c6cfbabc",
+  "plate": "S1CGG00",
+  "camera_id": "21",
+  "timestamp": "2026-02-07T16:02:33.002364",
+  "confidence": 0.3,
+  "detection_class": "license_plate",
+  "model": "yolov8n",
+  "brand": "N/A",
+  "bbox": {
+    "x1": 1365,
+    "y1": 621,
+    "x2": 1470,
+    "y2": 676
+  },
+  "photo": "S1CGG00_20260207_160232.jpg",
+  "plate_snapshot": "S1CGG00_plate.jpg"
+}

@@ -1,0 +1,18 @@
+{
+  "vehicle_id": "9ecfe7e54dde",
+  "plate": "00K7A27__",
+  "camera_id": "14",
+  "timestamp": "2026-02-07T14:47:58.966923",
+  "confidence": 0.5,
+  "detection_class": "license_plate",
+  "model": "N/A",
+  "brand": "N/A",
+  "bbox": {
+    "x1": 1123,
+    "y1": 1159,
+    "x2": 1296,
+    "y2": 1243
+  },
+  "photo": "00K7A27___20260207_144758.jpg",
+  "plate_snapshot": "00K7A27___plate.jpg"
+}

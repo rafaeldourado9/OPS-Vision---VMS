@@ -1,0 +1,11 @@
+{
+  "invasion_ai": {
+    "model_path": "yolov8n.pt",
+    "confidence_threshold": 0.5,
+    "target_classes": ["person"]
+  },
+  "people_counter": {
+    "model_path": "yolov8n.pt",
+    "confidence_threshold": 0.6
+  }
+}

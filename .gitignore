@@ -16,7 +16,7 @@ wheels/
 pip-wheel-metadata/
 .installed.cfg
 lib64/
-
+plan.md
 # Virtualenv
 .env
 .venv
