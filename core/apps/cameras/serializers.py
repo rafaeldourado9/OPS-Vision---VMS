@@ -49,7 +49,8 @@ class CameraCreateSerializer(serializers.Serializer):
 
     name = serializers.CharField(max_length=255)
     location = serializers.CharField(max_length=255)
-    rtsp_url = RTSPURLField()
+    # rtsp_url é opcional — câmeras RTMP push não têm URL RTSP
+    rtsp_url = RTSPURLField(required=False, allow_blank=True, default="")
     manufacturer = serializers.ChoiceField(
         choices=Camera.Manufacturer.choices,
         default=Camera.Manufacturer.OTHER,
@@ -75,9 +76,11 @@ class LiveStreamSerializer(serializers.Serializer):
 class PushConfigSerializer(serializers.Serializer):
     """Serializer para resposta do endpoint /push-config/."""
 
-    rtmp_url = serializers.CharField()
+    rtmp_url   = serializers.CharField()
     stream_key = serializers.CharField()
-    full_url = serializers.CharField()
+    username   = serializers.CharField()
+    password   = serializers.CharField()
+    full_url   = serializers.CharField()
 
 
 class CameraUpdateSerializer(serializers.Serializer):

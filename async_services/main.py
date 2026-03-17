@@ -11,7 +11,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from routers import health, sse, streaming, webhooks
+from routers import health, sse, streaming, streaming_auth, webhooks
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +68,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in _cors_origins],
     allow_credentials=True,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
 app.include_router(health.router)
 app.include_router(webhooks.router)
 app.include_router(streaming.router)
+app.include_router(streaming_auth.router)
 app.include_router(sse.router)

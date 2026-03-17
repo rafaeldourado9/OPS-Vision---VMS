@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.agents",
     "apps.health",
+    "apps.analytics",
 ]
 
 # Adiciona corsheaders se disponível
@@ -152,8 +153,13 @@ MEDIAMTX_STREAM_BASE_URL = os.environ.get(
 )
 MEDIAMTX_API_USER = os.environ.get("MEDIAMTX_API_USER", "mediamtx_api_user")
 MEDIAMTX_API_PASSWORD = os.environ.get("MEDIAMTX_API_PASSWORD", "GtV!sionMed1aMTX$2025")
-# URL pública RTMP (para câmeras publicarem stream via push)
+# URL pública RTMP — domínio/IP público do servidor, exibido ao operador
+# Ex: rtmp://cameras.suaempresa.com:1935
 MEDIAMTX_RTMP_URL = os.environ.get("MEDIAMTX_RTMP_URL", "rtmp://localhost:1935")
+
+# Segredo para geração do token HMAC de autenticação RTMP push
+# Deve ser longo e aleatório. Mesmo valor deve estar no container fastapi.
+MEDIAMTX_PUBLISH_SECRET = os.environ.get("MEDIAMTX_PUBLISH_SECRET", "")
 # URLs públicas (acessíveis pelo browser/frontend)
 MEDIAMTX_HLS_BASE_URL = os.environ.get("MEDIAMTX_HLS_BASE_URL", "http://localhost:8888")
 MEDIAMTX_WEBRTC_BASE_URL = os.environ.get("MEDIAMTX_WEBRTC_BASE_URL", "http://localhost:8889")
@@ -212,3 +218,6 @@ STORAGE_QUOTA_WARN_THRESHOLD = float(
 
 # JWT
 JWT_SECRET = os.environ.get("JWT_SECRET", "INSECURE-change-me")
+
+# Analytics Service — chave interna para o serviço de analytics se autenticar
+ANALYTICS_SERVICE_API_KEY = os.environ.get("ANALYTICS_SERVICE_API_KEY", "")

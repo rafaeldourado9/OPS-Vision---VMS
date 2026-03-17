@@ -286,33 +286,37 @@ def set_camera_online(camera_id: int, is_online: bool) -> None:
 
 
 def generate_rtmp_push_url(camera_id: int, tenant_id: int) -> dict[str, str]:
-    """Gera URLs RTMP push para configurar uma câmera.
+    """Gera credenciais RTMP push para configurar uma câmera.
 
-    A câmera usa estas informações para enviar stream via RTMP push:
-    - Server: rtmp://host:1935/tenant-{tenant_id}
-    - Stream Key: cam-{camera_id}
-
-    O path resultante (tenant-{tenant_id}/cam-{camera_id}) é compatível
-    com _build_path_name() e os hooks on_ready/on_not_ready do MediaMTX.
-
-    Args:
-        camera_id: ID da câmera.
-        tenant_id: ID do tenant.
+    Fluxo:
+    - MediaMTX recebe a conexão RTMP e chama POST /streaming/auth/
+    - FastAPI valida o token HMAC-SHA256(path, MEDIAMTX_PUBLISH_SECRET)
+    - Token aprovado → stream aceito
 
     Returns:
-        Dict com rtmp_url, stream_key e full_url.
-
-    Raises:
-        Camera.DoesNotExist: Câmera não encontrada.
+        Dict com rtmp_url, stream_key, username, password e full_url.
     """
+    import hashlib
+    import hmac as _hmac
+
     camera = Camera.objects.get(id=camera_id)
     rtmp_base = settings.MEDIAMTX_RTMP_URL
-    rtmp_url = f"{rtmp_base}/tenant-{camera.tenant_id}"
-    stream_key = f"cam-{camera.id}"
+    path = f"tenant-{camera.tenant_id}/cam-{camera.id}"
+    secret = getattr(settings, "MEDIAMTX_PUBLISH_SECRET", "")
+
+    token = _hmac.new(
+        secret.encode(), path.encode(), hashlib.sha256
+    ).hexdigest()[:24]
+
+    username = f"cam-{camera.id}"
+
     return {
-        "rtmp_url": rtmp_url,
-        "stream_key": stream_key,
-        "full_url": f"{rtmp_url}/{stream_key}",
+        "rtmp_url": rtmp_base,
+        "stream_key": path,
+        "username": username,
+        "password": token,
+        # URL com credenciais embutidas (compatível com FFmpeg, OBS, etc.)
+        "full_url": f"rtmp://{username}:{token}@{rtmp_base.removeprefix('rtmp://')}/{path}",
     }
 
 

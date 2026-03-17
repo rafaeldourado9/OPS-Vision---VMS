@@ -6,6 +6,60 @@ from celery import shared_task
 logger = logging.getLogger(__name__)
 
 
+@shared_task(name="cameras.reprovision_mediamtx", bind=True, max_retries=3, default_retry_delay=15)
+def reprovision_mediamtx_task(self) -> dict:
+    """Reconcilia paths do MediaMTX com câmeras cadastradas no banco.
+
+    Roda na inicialização e a cada 5 minutos para garantir que câmeras
+    não desapareçam após restart do MediaMTX.
+
+    Lógica:
+    - Lista paths presentes no MediaMTX
+    - Para cada câmera no banco sem path correspondente → registra
+    - Não remove paths extras (pode haver streams externos)
+
+    Returns:
+        Dict com reprovisioned (int) e errors (int).
+    """
+    from apps.cameras.models import Camera
+    from shared.mediamtx_client import MediaMTXClient, MediaMTXError
+
+    client = MediaMTXClient()
+
+    try:
+        existing_paths = {p.name for p in client.list_paths()}
+    except MediaMTXError as exc:
+        logger.warning("reprovision_mediamtx: não foi possível listar paths — %s", exc)
+        raise self.retry(exc=exc)
+
+    cameras = Camera.objects.select_related("agent").all()
+    reprovisioned = 0
+    errors = 0
+
+    for camera in cameras:
+        path_name = f"tenant-{camera.tenant_id}/cam-{camera.id}"
+        if path_name in existing_paths:
+            continue
+        try:
+            if camera.agent_id:
+                client.add_path(name=path_name)
+            else:
+                client.add_path(name=path_name, source=camera.rtsp_url)
+            reprovisioned += 1
+            logger.info("reprovision: path restaurado %s", path_name)
+        except MediaMTXError as exc:
+            logger.error("reprovision: falha ao restaurar %s — %s", path_name, exc)
+            errors += 1
+
+    if reprovisioned:
+        logger.info(
+            "reprovision_mediamtx: %d paths restaurados, %d erros",
+            reprovisioned, errors,
+        )
+
+    return {"reprovisioned": reprovisioned, "errors": errors}
+
+
 @shared_task(name="cameras.check_online_status")
 def check_online_status(camera_id: int) -> bool:
     """Verifica se a câmera está online via MediaMTX.
