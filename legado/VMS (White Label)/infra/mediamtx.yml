@@ -1,0 +1,120 @@
+###############################################
+# MediaMTX configuration file
+# Câmeras são adicionadas DINAMICAMENTE via API
+###############################################
+
+logLevel: info
+logDestinations: [stdout]
+
+readTimeout: 120s
+writeTimeout: 120s
+writeQueueSize: 524288
+udpMaxPayloadSize: 1472
+
+###############################################
+# Authentication
+
+authMethod: internal
+
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+        path:
+      - action: read
+        path:
+      - action: playback
+        path:
+
+  - user: mediamtx_api_user
+    pass: "GtV!sionMed1aMTX$2025"
+    ips: []
+    permissions:
+      - action: api
+
+###############################################
+# Control API
+
+api: yes
+apiAddress: :9997
+apiEncryption: no
+apiAllowOrigins: ['*']
+
+###############################################
+# Playback server
+
+playback: yes
+playbackAddress: :9996
+playbackEncryption: no
+playbackAllowOrigins: ['*']
+
+###############################################
+# RTSP server
+
+rtsp: yes
+rtspTransports: [tcp, udp]
+rtspEncryption: "no"
+rtspAddress: :8554
+rtspAuthMethods: [basic]
+
+###############################################
+# RTMP server
+
+rtmp: yes
+rtmpAddress: :1935
+rtmpEncryption: "no"
+
+###############################################
+# HLS server
+
+hls: yes
+hlsAddress: :8888
+hlsEncryption: no
+hlsAllowOrigins: ['*']
+hlsVariant: fmp4
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsSegmentMaxSize: 50M
+hlsMuxerCloseAfter: 120s
+hlsPartDuration: 200ms
+
+###############################################
+# WebRTC server
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcEncryption: no
+webrtcAllowOrigins: ['*']
+webrtcLocalUDPAddress: :8189
+webrtcIPsFromInterfaces: yes
+webrtcAdditionalHosts: ["127.0.0.1", "localhost"]
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+webrtcHandshakeTimeout: 10s
+
+###############################################
+# SRT server
+
+srt: yes
+srtAddress: :8890
+
+###############################################
+# Default path settings
+
+pathDefaults:
+  source: publisher
+  sourceOnDemand: no
+  maxReaders: 100
+
+  # Gravação gerenciada pelo recorder-worker via FFmpeg + RabbitMQ
+  record: no
+
+  overridePublisher: yes
+  rtspTransport: tcp
+
+###############################################
+# Paths — provisionados dinamicamente via API
+
+paths:

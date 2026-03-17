@@ -1,0 +1,270 @@
+# Plano: 1 Worker por Analítico + Latência < 2s
+
+## Arquitetura: 2 Camadas
+
+> [!IMPORTANT]
+> Carregar YOLO separado para cada analítico = 10x modelos na VRAM (inviável). A solução é **separar inferência de processamento**.
+
+```
+CAMADA 1 — GPU (inferência compartilhada)
+frame-grabber → [ai.frame] → yolo-worker
+                                  ↓
+                         publica detecções em
+                         [ai.detections] (fanout exchange)
+
+CAMADA 2 — CPU (um worker por analítico, sem modelo pesado)
+[ai.detect.object_detection]  → worker-object-detection
+[ai.detect.crowd]             → worker-crowd
+[ai.detect.intrusion]         → worker-intrusion
+[ai.detect.loitering]         → worker-loitering
+[ai.detect.abandoned_object]  → worker-abandoned-object
+[ai.detect.queue]             → worker-queue
+[ai.detect.heatmap]           → worker-heatmap
+[ai.detect.line_crossing]     → worker-line-crossing
+[ai.detect.vehicle_traffic]   → worker-vehicle-traffic
+[ai.detect.human_traffic]     → worker-human-traffic
+[ai.frame.facial]             → worker-facial   (InsightFace, GPU dedicada)
+[ai.frame.lpr]                → worker-lpr      (por último)
+
+Todos publicam em → [ai.events] → Django → PostgreSQL + WebSocket
+```
+
+**frame-grabber** roteia para `ai.frame.facial` e `ai.frame.lpr` direto  
+**yolo-worker** roteia detecções para cada fila de analítico baseado nos ROIs do frame
+
+---
+
+## Workers por Analítico
+
+| Worker | Fila consumida | Modelo | Escalável? |
+|---|---|---|---|
+| `yolo-worker` | `ai.frame` | YOLOv8n (GPU) | ✅ replicas |
+| `worker-object-detection` | `ai.detect.object_detection` | nenhum (CPU) | ✅ replicas |
+| `worker-crowd` | `ai.detect.crowd` | nenhum (CPU) | ✅ |
+| `worker-intrusion` | `ai.detect.intrusion` | nenhum (CPU) | ✅ |
+| `worker-loitering` | `ai.detect.loitering` | nenhum (CPU, stateful) | ⚠️ consistente por camera |
+| `worker-abandoned-object` | `ai.detect.abandoned_object` | nenhum (CPU, stateful) | ⚠️ |
+| `worker-queue` | `ai.detect.queue` | nenhum (CPU, stateful) | ⚠️ |
+| `worker-heatmap` | `ai.detect.heatmap` | nenhum (CPU) | ✅ |
+| `worker-line-crossing` | `ai.detect.line_crossing` | nenhum (CPU, stateful) | ⚠️ |
+| `worker-vehicle-traffic` | `ai.detect.vehicle_traffic` | nenhum (CPU) | ✅ |
+| `worker-human-traffic` | `ai.detect.human_traffic` | nenhum (CPU) | ✅ |
+| `worker-facial` | `ai.frame.facial` | InsightFace (GPU) | ✅ |
+| `worker-lpr` | `ai.frame.lpr` | YOLO plates + OCR | ✅ (fase final) |
+
+> [!NOTE]
+> Workers **stateful** (loitering, abandoned, queue, line_crossing) mantêm estado por `camera_id`. Com múltiplas réplicas, o frame-grabber precisa garantir que o mesmo `camera_id` sempre vai para a mesma réplica (consistent hashing).
+
+---
+
+## Os 5 Gargalos Reais (diagnóstico)
+
+
+### 🔴 Gargalo 1 — `DEDUP_TTL_SECONDS=300` (5 MINUTOS!)
+**Este é o motivo principal de "não detectar nada".**
+
+```python
+# .env atual
+DEDUP_TTL_SECONDS=300   # ← bloqueia TODOS os eventos por 5 minutos após o primeiro
+```
+
+Um objeto detectado às 10h00 não gera novo evento até 10h05. Para o usuário parece que "não detecta". Correção: **30 segundos** no máximo.
+
+---
+
+### 🔴 Gargalo 2 — Disco como transporte de frames
+
+O pipeline atual:
+```
+frame-grabber → escreve Frame no disco → publica path → ai-worker lê do disco
+```
+
+Isso adiciona **2 operações de I/O** por frame. Com 500 câmeras = 1000 operações de disco/segundo. **Solução**: enviar frame em memória via RabbitMQ (base64 já está no frame-grabber para thumbnail).
+
+---
+
+### 🔴 Gargalo 3 — InsightFace + YOLO competindo pela GPU
+
+Ambos rodam no mesmo processo `ai-worker`. InsightFace carrega `buffalo_l` (~280MB VRAM) + YOLO `yolov8n` — juntos podem ultrapassar 4GB VRAM de uma RTX 4060, causando fallback para CPU.
+
+---
+
+### 🟡 Gargalo 4 — `await asyncio.sleep(1)` no frame-grabber
+
+O frame-grabber dorme 1 segundo após cada frame publicado. Latência mínima = 1s só de espera. Para < 2s de ponta a ponta, precisa ser **0.3–0.5s**.
+
+---
+
+### 🟡 Gargalo 5 — Sem batching no YOLO
+
+YOLO processa 1 frame por vez. Com GPU, batch de 4 frames tem quase o mesmo custo de 1. Para 500 câmeras isso importa.
+
+---
+
+## Como o `yolo-worker` distribui para os analíticos
+
+O `yolo-worker` recebe o frame + lista de ROIs, roda YOLO **uma vez**, e publica as detecções nas filas corretas baseado nos `ia_type` dos ROIs da câmera:
+
+```python
+# yolo-worker — após inferência YOLO
+for roi in frame_data['rois']:
+    ia_type = roi['ia_type']
+    queue_name = f'ai.detect.{ia_type}'
+    payload = {
+        'camera_id': ...,
+        'tenant_id': ...,
+        'roi': roi,
+        'detections': detections_serialized,  # bbox, class_id, confidence, tracker_id
+        'frame_b64': frame_data['frame_b64'],  # para salvar snapshot
+    }
+    await channel.publish(payload, routing_key=queue_name)
+```
+
+Cada worker de analítico recebe apenas as detecções do ROI dele e aplica sua lógica (polygon filtering, thresholds, timers, etc.).
+
+---
+
+## Correções de Latência — Ordem de Impacto
+
+### Fix 1 — [.env](file:///d:/VMS%20%28White%20Label%29/backend-fastapi/workers/ai_worker/.env) (5 minutos, impacto imediato)
+
+```diff
+- DEDUP_TTL_SECONDS=300
++ DEDUP_TTL_SECONDS=30
+
+- FACIAL_DEDUP_TTL=60
++ FACIAL_DEDUP_TTL=45
+```
+
+**Resultado:** eventos passam a ser gerados a cada 30s em vez de 5 minutos.
+
+---
+
+### Fix 2 — Enviar frame via RabbitMQ (sem disco)
+
+#### [MODIFY] `frame-grabber/service.py`
+
+```python
+# Em vez de salvar no disco e publicar path:
+_, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+frame_b64 = base64.b64encode(buf.tobytes()).decode()
+
+msg = {
+    'camera_id': camera_id,
+    'tenant_id': tenant_id,
+    'frame_b64': frame_b64,   # ← frame direto na mensagem
+    'rois': general_rois,
+}
+```
+
+#### [MODIFY] `ai-worker/service.py`
+
+```python
+# Em vez de cv2.imread(frame_path):
+import base64, numpy as np
+frame_bytes = base64.b64decode(frame_data['frame_b64'])
+frame = cv2.imdecode(np.frombuffer(frame_bytes, np.uint8), cv2.IMREAD_COLOR)
+```
+
+> [!NOTE]
+> Mensagem RabbitMQ com frame 1080p JPEG ~80KB (comprimido). RabbitMQ suporta até 128MB por mensagem. Sem problema para 500 câmeras @ 1 FPS.
+
+---
+
+### Fix 3 — Isolar Facial em container próprio
+
+#### [NEW] `backend-fastapi/workers/ai_worker_facial/worker/service.py`
+
+Worker só com InsightFace, sem YOLO. Consome `ai.frame.facial`.
+
+#### [MODIFY] `ai-worker/service.py`
+
+Remover: `_init_facial()`, [_handle_facial()](file:///d:/VMS%20%28White%20Label%29/backend-fastapi/workers/ai_worker/worker/service.py#590-612), `_facial_analyzer`.
+Isso libera ~2GB VRAM para o YOLO.
+
+#### [MODIFY] `frame-grabber/service.py`
+
+```python
+facial_rois = [r for r in triggered_rois if r.get('ia_type') == 'facial']
+general_rois = [r for r in triggered_rois if r.get('ia_type') not in ('facial', 'lpr')]
+
+if general_rois:
+    await channel.publish({'frame_b64': ..., 'rois': general_rois}, 'ai.frame')
+if facial_rois:
+    await channel.publish({'frame_b64': ..., 'rois': facial_rois}, 'ai.frame.facial')
+```
+
+---
+
+### Fix 4 — Reduzir sleep do frame-grabber
+
+#### [MODIFY] `frame-grabber/service.py`
+
+```diff
+- await asyncio.sleep(1)   # fim do loop
++ await asyncio.sleep(0.33)  # ~3 FPS para IA
+```
+
+---
+
+## Estrutura de Pastas dos Workers
+
+```
+backend-fastapi/workers/
+├── frame_grabber/          ← existente (pequena mudança de roteamento)
+├── yolo_worker/            ← NOVO (extrai inferência do ai-worker atual)
+│   └── worker/service.py
+├── analytic_workers/       ← NOVO (um arquivo por analítico, leve)
+│   ├── base.py             ← classe base com publish_event + redis dedup
+│   ├── object_detection.py
+│   ├── crowd.py
+│   ├── intrusion.py
+│   ├── loitering.py        ← stateful
+│   ├── abandoned_object.py ← stateful
+│   ├── queue.py            ← stateful
+│   ├── heatmap.py
+│   ├── line_crossing.py    ← stateful
+│   ├── vehicle_traffic.py
+│   └── human_traffic.py
+├── facial_worker/          ← NOVO (InsightFace isolado)
+│   └── worker/service.py
+├── lpr_worker/             ← existente (corrigir bug + fase final)
+├── recorder/               ← existente
+├── clip_builder/           ← existente
+└── purge/                  ← existente
+```
+
+---
+
+## Latência Esperada Após Todos os Fixes
+
+| Etapa | Antes | Depois |
+|---|---|---|
+| Frame-grabber → fila | ~1s (sleep) | ~0.3s |
+| Fila → ai-worker | ~5ms | ~5ms |
+| Disco I/O (ler frame) | ~50ms | **0ms** (b64 na msg) |
+| YOLO inference (GPU) | ~100ms | ~80ms |
+| Publish evento | ~5ms | ~5ms |
+| Django → DB → WebSocket | ~100ms | ~100ms |
+| **Total** | **~3–6s** | **< 0.5s** |
+
+---
+
+## Ordem de Implementação
+
+### Sprint 1 — Fixes rápidos (hoje, sem refatorar)
+1. **[.env](file:///d:/VMS%20%28White%20Label%29/backend-fastapi/workers/ai_worker/.env)**: `DEDUP_TTL_SECONDS=30` → 5 min
+2. **`frame-grabber`**: sleep 1s → 0.3s → 10 min
+3. **`frame-grabber`**: roteamento `ai.frame.facial` → 30 min
+
+### Sprint 2 — Refatorar para arquitetura de 2 camadas
+4. Criar `yolo-worker` (extrai inferência do ai-worker atual)
+5. Criar `analytic_workers/base.py` + workers CPU por analítico
+6. Criar `facial-worker` isolado (mover InsightFace)
+7. Atualizar [docker-compose.yml](file:///d:/VMS%20%28White%20Label%29/infra/docker-compose.yml) com todos os serviços
+8. Remover `ai-worker` antigo (substituído por yolo-worker + analytic workers)
+
+### Sprint 3 — Escala e ALPR (por último)
+9. Consistent hashing para workers stateful
+10. `replicas: N` no compose para YOLO e analíticos
+11. Corrigir e isolar `lpr-worker`

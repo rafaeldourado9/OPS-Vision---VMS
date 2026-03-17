@@ -1,0 +1,21 @@
+FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    libgl1 libglib2.0-0 \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY lpr_worker/requirements.txt .
+RUN pip install --upgrade pip && \
+    for i in 1 2 3 4 5; do \
+        pip install --retries 10 --timeout 600 -r requirements.txt && break || sleep 15; \
+    done && \
+    rm -rf /root/.cache/pip
+
+COPY lpr_worker/worker/ ./worker/
+COPY common/ ./common/
+
+ENV PYTHONUNBUFFERED=1
+CMD ["python", "-m", "worker.service"]

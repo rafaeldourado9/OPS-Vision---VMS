@@ -1,0 +1,12 @@
+aio-pika==9.4.3
+redis==5.0.4
+opencv-python-headless==4.9.0.80
+numpy==1.26.4
+# torch already in base image (pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime)
+ultralytics==8.2.27
+# T2.1.1 — PaddleOCR substitui EasyOCR
+# Pinned: PaddlePaddle 3.x has onednn incompatibility on CPU (ConvertPirAttribute2RuntimeAttribute)
+paddlepaddle>=2.6.0,<3.0
+paddleocr>=2.7.3,<3.0
+prometheus_client==0.21.0
+aiohttp==3.9.5

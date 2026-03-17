@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+.env.local
+
+# Django
+*.log
+staticfiles/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Storage (dados locais - nao versionar)
+storage/
+models/*.pt
+models/*.pth
+
+# Legado (referencia apenas)
+legado/
+
+# Secrets
+backend-django/.env
+frontend/.env

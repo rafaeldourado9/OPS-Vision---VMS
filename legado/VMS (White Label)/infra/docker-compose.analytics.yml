@@ -1,0 +1,5 @@
+# Analíticos pesados desabilitados - usar unified-analytic-worker no docker-compose.yml
+networks:
+  gtvision:
+    name: gtvision
+    external: true

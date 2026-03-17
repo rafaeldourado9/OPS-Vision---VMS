@@ -1,0 +1,153 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "x": 200,
+      "y": 10,
+      "width": 500,
+      "height": 30,
+      "text": "GT-Vision — Data Model (White Label + Multi-Tenant)",
+      "fontSize": 20,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "strokeColor": "#1e1e2e"
+    },
+    {
+      "id": "reseller",
+      "type": "rectangle",
+      "x": 20,
+      "y": 60,
+      "width": 200,
+      "height": 200,
+      "strokeColor": "#6f42c1",
+      "backgroundColor": "#f3ebff",
+      "label": {
+        "text": "Reseller\n──────────────\nid: UUID PK\nname\nslug (unique)\ncustom_domain (unique)\nprimary_color\nsecondary_color\nlogo_url\nfavicon_url\ndark_mode_default\nterms_url\nprivacy_url\nactive"
+      }
+    },
+    {
+      "id": "license",
+      "type": "rectangle",
+      "x": 260,
+      "y": 60,
+      "width": 180,
+      "height": 140,
+      "strokeColor": "#fd7e14",
+      "backgroundColor": "#fff3cd",
+      "label": {
+        "text": "License\n──────────────\nid: UUID PK\nreseller_id FK\nmax_cameras: INT\nvalid_until: DATE\nactive: BOOL"
+      }
+    },
+    {
+      "id": "tenant",
+      "type": "rectangle",
+      "x": 480,
+      "y": 60,
+      "width": 180,
+      "height": 160,
+      "strokeColor": "#0dcaf0",
+      "backgroundColor": "#cff4fc",
+      "label": {
+        "text": "Tenant\n──────────────\nid: UUID PK\nreseller_id FK\nlicense_id FK\nname\nsubdomain (unique)\nactive\ncreated_at"
+      }
+    },
+    {
+      "id": "user",
+      "type": "rectangle",
+      "x": 700,
+      "y": 60,
+      "width": 200,
+      "height": 180,
+      "strokeColor": "#198754",
+      "backgroundColor": "#d1e7dd",
+      "label": {
+        "text": "User\n──────────────\nid: UUID PK\ntenant_id FK (nullable)\nemail\npassword_hash\nrole: operator|\n  supervisor|\n  city_admin|\n  reseller_admin|\n  super_admin\nactive\nlast_login"
+      }
+    },
+    {
+      "id": "camera",
+      "type": "rectangle",
+      "x": 480,
+      "y": 260,
+      "width": 200,
+      "height": 240,
+      "strokeColor": "#0d6efd",
+      "backgroundColor": "#e7f1ff",
+      "label": {
+        "text": "Camera\n──────────────\nid: UUID PK\ntenant_id FK ★\nname, address\nlatitude, longitude\nstream_protocol:\n  rtsp | rtmp\nstream_url\nstream_key\nretention_days: 7|15|30\nia_enabled: BOOL\nia_status:\n  disabled|\n  ia_pending|\n  active\nonline: BOOL\nlast_seen"
+      }
+    },
+    {
+      "id": "roi",
+      "type": "rectangle",
+      "x": 720,
+      "y": 260,
+      "width": 180,
+      "height": 180,
+      "strokeColor": "#fd7e14",
+      "backgroundColor": "#fff3cd",
+      "label": {
+        "text": "ROI\n──────────────\nid: UUID PK\ntenant_id FK ★\ncamera_id FK\nname\npolygon: JSONB\n  [[x,y],...]\nia_type:\n  lpr|intrusion|\n  crowd\nactive\ncreated_at"
+      }
+    },
+    {
+      "id": "segment",
+      "type": "rectangle",
+      "x": 20,
+      "y": 320,
+      "width": 200,
+      "height": 200,
+      "strokeColor": "#6c757d",
+      "backgroundColor": "#f8f9fa",
+      "label": {
+        "text": "RecordingSegment\n──────────────\nid: UUID PK\ntenant_id FK ★\ncamera_id FK\nstarted_at\nended_at\nduration_seconds\nfile_path\nfile_size_bytes\nexpires_at ← INDEX\ncreated_at"
+      }
+    },
+    {
+      "id": "clip",
+      "type": "rectangle",
+      "x": 240,
+      "y": 320,
+      "width": 190,
+      "height": 200,
+      "strokeColor": "#198754",
+      "backgroundColor": "#d1e7dd",
+      "label": {
+        "text": "Clip\n──────────────\nid: UUID PK\ntenant_id FK ★\ncamera_id FK\ncreated_by FK→User\nstarted_at\nended_at\nfile_path\nfile_size_bytes\nstatus:\n  processing|\n  ready|error\ncreated_at"
+      }
+    },
+    {
+      "id": "ai-event",
+      "type": "rectangle",
+      "x": 480,
+      "y": 540,
+      "width": 200,
+      "height": 200,
+      "strokeColor": "#dc3545",
+      "backgroundColor": "#f8d7da",
+      "label": {
+        "text": "AIEvent\n──────────────\nid: UUID PK\ntenant_id FK ★\ncamera_id FK\nroi_id FK\nevent_type:\n  lpr|intrusion|crowd\nsnapshot_path\nevent_data: JSONB\n  {plate, model,\n   color, confidence}\ndetected_at ← INDEX\ncreated_at"
+      }
+    },
+    {
+      "id": "index-note",
+      "type": "text",
+      "x": 20,
+      "y": 560,
+      "width": 300,
+      "height": 60,
+      "text": "★ = tenant_id indexado em todas as tabelas\nRegra: NENHUMA query sem filtro tenant_id",
+      "fontSize": 13,
+      "strokeColor": "#dc3545",
+      "backgroundColor": "#fff3cd"
+    }
+  ],
+  "appState": {
+    "gridSize": 20,
+    "viewBackgroundColor": "#ffffff"
+  }
+}

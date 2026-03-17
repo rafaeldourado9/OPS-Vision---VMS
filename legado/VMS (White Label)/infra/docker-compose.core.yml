@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=gtvision
+      - POSTGRES_USER=gtvision
+      - POSTGRES_PASSWORD=gtvision123
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gtvision"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gtvision
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - gtvision
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+    networks:
+      - gtvision
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+    ports:
+      - "8554:8554"   # RTSP
+      - "1935:1935"   # RTMP
+      - "8889:8889"   # WebRTC
+      - "8888:8888"   # HLS
+      - "9996:9996"   # Playback
+      - "9997:9997"   # MediaMTX API
+    networks:
+      - gtvision
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+
+networks:
+  gtvision:
+    name: gtvision
+    external: true

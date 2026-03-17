@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg:       #0A0A0F;
+  --surface:  #111118;
+  --elevated: #1A1A24;
+  --border:   #252530;
+  --accent:   #3B82F6;
+  --text-1:   #F4F4F5;
+  --text-2:   #A1A1AA;
+  --text-3:   #52525B;
+  --success:  #22C55E;
+  --warning:  #F59E0B;
+  --danger:   #EF4444;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  background-color: var(--bg);
+  color: var(--text-1);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+/* Focus ring global */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    background-color: var(--accent);
+    @apply text-white hover:opacity-90 active:scale-95;
+  }
+  .btn-ghost {
+    @apply text-t2 hover:bg-elevated hover:text-t1 active:scale-95;
+  }
+  .btn-danger {
+    background-color: var(--danger);
+    @apply text-white hover:opacity-90 active:scale-95;
+  }
+  .card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    @apply rounded-xl;
+  }
+  .input {
+    background-color: var(--elevated);
+    border: 1px solid var(--border);
+    @apply w-full rounded-lg px-3 py-2 text-sm text-t1 placeholder-t3 transition-colors;
+  }
+  .input:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+  .label {
+    @apply block text-xs font-medium text-t2 mb-1.5;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+}
