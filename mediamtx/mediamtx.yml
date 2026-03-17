@@ -24,26 +24,20 @@ runOnDisconnect:
 ###############################################
 # Authentication
 
-authMethod: internal
+authMethod: http
 
-authInternalUsers:
-  # Qualquer IP pode ler streams (HLS/WebRTC/RTSP) e publicar (câmeras IP)
-  - user: any
-    pass:
-    ips: []
-    permissions:
-      - action: read
-      - action: publish
-      - action: playback
-
-  # API de controle e métricas (qualquer IP na rede Docker)
-  - user: any
-    pass:
-    ips: []
-    permissions:
-      - action: api
-      - action: metrics
-      - action: pprof
+# MediaMTX envia POST para este endpoint a cada conexão.
+# FastAPI valida: publish exige HMAC token; read/api/metrics são livres.
+authHTTPAddress: http://fastapi:8001/streaming/auth/
+# Apenas publish precisa de validação HMAC.
+# read/playback são liberados aqui — JWT do frontend controla o acesso.
+# api/metrics/pprof são chamadas internas do Docker.
+authHTTPExclude:
+  - action: read
+  - action: playback
+  - action: api
+  - action: metrics
+  - action: pprof
 
 ###############################################
 # Control API

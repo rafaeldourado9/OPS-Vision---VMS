@@ -2,7 +2,7 @@
   # ── Core ─────────────────────────────────────
   django:
     build: ./core
-    command: python manage.py runserver 0.0.0.0:8000
+    command: gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker --workers 4 --bind 0.0.0.0:8000 --timeout 120 --access-logfile -
     env_file: .env
     ports:
       - "8000:8000"
@@ -72,6 +72,7 @@
       - "80:80"
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - recordings:/var/recordings:ro
     depends_on:
       - django
       - fastapi
@@ -99,6 +100,38 @@
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ── Analytics Service ───────────────────────
+  analytics_service:
+    build: ./analytics_service
+    env_file: .env
+    environment:
+      MEDIAMTX_URL: http://mediamtx:9997
+      MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554
+      DJANGO_INTERNAL_URL: http://django:8000
+      REDIS_URL: redis://redis:6379/0
+      FPS: "10"
+      WORKERS_PER_PLUGIN: "8"
+      OPENCV_LOG_LEVEL: "0"
+      AV_LOG_FORCE_NOCOLOR: "1"
+      FRAME_EXECUTOR_WORKERS: "32"
+      MAX_QUEUE_DEPTH: "150"
+      YOLO_IMGSZ: "640"
+      YOLO_CONF: "0.30"
+      SNAPSHOTS_PATH: /recordings/snapshots
+      PLATE_DETECTOR_MODEL: /models/plate_detector.pt
+    depends_on:
+      mediamtx:
+        condition: service_healthy
+      django:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./analytics_service/analytics:/app/analytics
+      - recordings:/recordings
+      - ./models:/models:ro
+    restart: unless-stopped
 
   # ── Infraestrutura ──────────────────────────
   postgres:
