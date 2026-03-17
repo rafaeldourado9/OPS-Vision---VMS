@@ -12,6 +12,17 @@ class Tenant(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # ── Reconhecimento Facial (LGPD) ──────────────────────────────────────────
+    # Nunca habilitar sem aceite explícito do termo de consentimento.
+    facial_recognition_enabled = models.BooleanField(
+        default=False,
+        help_text="Habilita reconhecimento facial. Requer aceite do termo LGPD.",
+    )
+    facial_recognition_consent_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Data/hora do aceite do termo de consentimento LGPD.",
+    )
+
     class Meta:
         ordering = ["name"]
 
