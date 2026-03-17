@@ -1,252 +1,267 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Plus, Camera, Trash2, Pencil } from 'lucide-react'
-import Modal from '../components/Modal'
-import api from '../lib/api'
-import { useCameraStore } from '../stores/cameraStore'
-import { formatDate } from '../lib/utils'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Plus, Search, WifiOff, Trash2, ExternalLink, AlertTriangle,
+  Wifi, Bot, Radio,
+} from 'lucide-react'
+import { clsx } from 'clsx'
+import { Spinner } from '@/components/ui/Spinner'
+import { Modal } from '@/components/ui/Modal'
+import { CameraWizard } from '@/components/camera/CameraWizard'
+import { useCameras } from '@/hooks/useCameras'
+import type { Camera } from '@/types'
 
-const MANUFACTURERS = [
-  { value: 'hikvision', label: 'Hikvision' },
-  { value: 'intelbras', label: 'Intelbras' },
-  { value: 'dahua', label: 'Dahua' },
-  { value: 'other', label: 'Outro' },
-]
+const MANUFACTURER_LABELS: Record<string, string> = {
+  hikvision: 'Hikvision',
+  intelbras: 'Intelbras',
+  dahua: 'Dahua',
+  other: 'Outro',
+}
 
-const RETENTION_OPTIONS = [
-  { value: 7, label: '7 dias' },
-  { value: 15, label: '15 dias' },
-  { value: 30, label: '30 dias' },
-]
+export function CamerasPage() {
+  const navigate = useNavigate()
+  const { cameras, loading, refresh, remove } = useCameras()
 
-export default function CamerasPage() {
-  const { cameras, fetchCameras, loading } = useCameraStore()
-  const [showModal, setShowModal] = useState(false)
-  const [editId, setEditId] = useState<number | null>(null)
-  const [form, setForm] = useState({
-    name: '',
-    location: '',
-    rtsp_url: '',
-    manufacturer: 'other',
-    retention_days: 7,
-  })
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [search, setSearch]             = useState('')
+  const [wizardOpen, setWizardOpen]     = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Camera | null>(null)
 
-  useEffect(() => {
-    fetchCameras()
-  }, [])
+  const filtered = cameras.filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    c.location.toLowerCase().includes(search.toLowerCase()),
+  )
 
-  const resetForm = () => {
-    setForm({ name: '', location: '', rtsp_url: '', manufacturer: 'other', retention_days: 7 })
-    setEditId(null)
-    setError('')
+  const online  = cameras.filter(c => c.is_online).length
+  const offline = cameras.length - online
+
+  const handleCreated = (camera: Camera) => {
+    refresh()
+    navigate(`/cameras/${camera.id}`)
   }
 
-  const openCreate = () => {
-    resetForm()
-    setShowModal(true)
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    await remove(deleteTarget.id, deleteTarget.name)
+    setDeleteTarget(null)
   }
 
-  const openEdit = (cam: typeof cameras[0]) => {
-    setForm({
-      name: cam.name,
-      location: cam.location,
-      rtsp_url: cam.rtsp_url,
-      manufacturer: cam.manufacturer,
-      retention_days: cam.retention_days,
-    })
-    setEditId(cam.id)
-    setShowModal(true)
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setSaving(true)
-    try {
-      if (editId) {
-        await api.patch(`/cameras/${editId}/`, form)
-      } else {
-        await api.post('/cameras/', form)
-      }
-      setShowModal(false)
-      resetForm()
-      fetchCameras()
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.response?.data?.rtsp_url?.[0] || 'Erro ao salvar câmera')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleDelete = async (id: number) => {
-    if (!confirm('Tem certeza que deseja remover esta câmera?')) return
-    try {
-      await api.delete(`/cameras/${id}/`)
-      fetchCameras()
-    } catch {
-      alert('Erro ao remover câmera')
-    }
+  if (loading) {
+    return <div className="flex items-center justify-center py-32"><Spinner size="lg" /></div>
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold">Câmeras</h1>
+    <div className="space-y-4 animate-fade-in">
+
+      {/* ── Toolbar ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative w-64">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-t3 pointer-events-none" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="input pl-8 h-9 text-xs"
+            placeholder="Buscar câmera ou local..."
+          />
+        </div>
+
+        {/* Counters */}
+        <div className="flex items-center gap-3">
+          <Stat color="var(--success)" label="online"  value={online}  />
+          <Stat color="var(--text-3)"  label="offline" value={offline} />
+        </div>
+
         <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-vms-accent hover:bg-vms-accent-hover rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+          onClick={() => setWizardOpen(true)}
+          className="btn btn-primary h-9 text-xs ml-auto"
         >
-          <Plus size={16} /> Adicionar Câmera
+          <Plus size={15} /> Adicionar câmera
         </button>
       </div>
 
-      {loading && cameras.length === 0 ? (
-        <p className="text-vms-muted">Carregando...</p>
-      ) : cameras.length === 0 ? (
-        <div className="text-center py-16 text-vms-muted">
-          <Camera size={48} className="mx-auto mb-3 opacity-40" />
-          <p>Nenhuma câmera cadastrada</p>
-          <button onClick={openCreate} className="text-vms-accent mt-2 text-sm hover:underline">
-            Adicionar primeira câmera
-          </button>
-        </div>
+      {/* ── List ────────────────────────────────────────────────────────── */}
+      {filtered.length === 0 ? (
+        <EmptyState hasSearch={!!search} onAdd={() => setWizardOpen(true)} />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {cameras.map((cam) => (
-            <div key={cam.id} className="bg-vms-card rounded-xl p-4 border border-vms-border hover:border-vms-accent/30 transition-colors">
-              <div className="flex items-start justify-between mb-3">
-                <Link to={`/cameras/${cam.id}`} className="flex-1">
-                  <h3 className="font-semibold text-sm hover:text-vms-accent transition-colors">{cam.name}</h3>
-                  <p className="text-vms-muted text-xs">{cam.location}</p>
-                </Link>
-                <div className="flex gap-1">
-                  <button onClick={() => openEdit(cam)} className="p-1.5 text-vms-muted hover:text-white rounded-lg hover:bg-vms-card-hover">
-                    <Pencil size={14} />
-                  </button>
-                  <button onClick={() => handleDelete(cam.id)} className="p-1.5 text-vms-muted hover:text-red-400 rounded-lg hover:bg-vms-card-hover">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-1.5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-vms-muted">Status</span>
-                  <span className={cam.is_online ? 'text-vms-success' : 'text-vms-danger'}>
-                    ● {cam.is_online ? 'Online' : 'Offline'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-vms-muted">Fabricante</span>
-                  <span className="capitalize">{cam.manufacturer}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-vms-muted">Retenção</span>
-                  <span>{cam.retention_days} dias</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-vms-muted">Criada</span>
-                  <span>{formatDate(cam.created_at)}</span>
-                </div>
-              </div>
-
-              <Link
-                to={`/cameras/${cam.id}`}
-                className="mt-3 block text-center text-xs bg-vms-card-hover hover:bg-vms-border rounded-lg py-2 transition-colors"
-              >
-                Abrir ao vivo
-              </Link>
-            </div>
+        <div className="card overflow-hidden divide-y" style={{ borderColor: 'var(--border)' }}>
+          {filtered.map(camera => (
+            <CameraRow
+              key={camera.id}
+              camera={camera}
+              onView={() => navigate(`/cameras/${camera.id}`)}
+              onDelete={() => setDeleteTarget(camera)}
+            />
           ))}
         </div>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* ── Wizard ──────────────────────────────────────────────────────── */}
+      <CameraWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onCreated={handleCreated}
+      />
+
+      {/* ── Delete modal ────────────────────────────────────────────────── */}
       <Modal
-        open={showModal}
-        onClose={() => { setShowModal(false); resetForm() }}
-        title={editId ? 'Editar Câmera' : 'Adicionar Câmera'}
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Remover câmera"
+        size="sm"
+        footer={
+          <>
+            <button className="btn btn-ghost" onClick={() => setDeleteTarget(null)}>Cancelar</button>
+            <button className="btn btn-danger" onClick={handleDelete}>Remover</button>
+          </>
+        }
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="flex gap-3 items-start">
+          <AlertTriangle size={20} className="shrink-0 mt-0.5" style={{ color: 'var(--danger)' }} />
           <div>
-            <label className="block text-sm text-vms-muted mb-1">Nome</label>
-            <input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full bg-vms-bg border border-vms-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-vms-accent"
-              required
-            />
+            <p className="text-sm text-t1">
+              Remover <span className="font-semibold">"{deleteTarget?.name}"</span>?
+            </p>
+            <p className="text-xs text-t2 mt-1 leading-relaxed">
+              O stream será interrompido e as gravações removidas conforme a política de retenção.
+              Esta ação não pode ser desfeita.
+            </p>
           </div>
-          <div>
-            <label className="block text-sm text-vms-muted mb-1">Localização</label>
-            <input
-              value={form.location}
-              onChange={(e) => setForm({ ...form, location: e.target.value })}
-              className="w-full bg-vms-bg border border-vms-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-vms-accent"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-vms-muted mb-1">URL RTSP</label>
-            <input
-              value={form.rtsp_url}
-              onChange={(e) => setForm({ ...form, rtsp_url: e.target.value })}
-              placeholder="rtsp://user:pass@ip:porta/path"
-              className="w-full bg-vms-bg border border-vms-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-vms-accent font-mono"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm text-vms-muted mb-1">Fabricante</label>
-              <select
-                value={form.manufacturer}
-                onChange={(e) => setForm({ ...form, manufacturer: e.target.value })}
-                className="w-full bg-vms-bg border border-vms-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-vms-accent"
-              >
-                {MANUFACTURERS.map((m) => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-vms-muted mb-1">Retenção</label>
-              <select
-                value={form.retention_days}
-                onChange={(e) => setForm({ ...form, retention_days: Number(e.target.value) })}
-                className="w-full bg-vms-bg border border-vms-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-vms-accent"
-              >
-                {RETENTION_OPTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-red-400 text-sm">{error}</div>
-          )}
-
-          <div className="flex gap-3 justify-end">
-            <button
-              type="button"
-              onClick={() => { setShowModal(false); resetForm() }}
-              className="px-4 py-2 text-sm rounded-lg bg-vms-card-hover hover:bg-vms-border transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 text-sm rounded-lg bg-vms-accent hover:bg-vms-accent-hover disabled:opacity-60 font-medium transition-colors"
-            >
-              {saving ? 'Salvando...' : editId ? 'Salvar' : 'Adicionar'}
-            </button>
-          </div>
-        </form>
+        </div>
       </Modal>
+    </div>
+  )
+}
+
+// ─── CameraRow ────────────────────────────────────────────────────────────────
+
+function CameraRow({ camera, onView, onDelete }: {
+  camera: Camera
+  onView: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div
+      className="flex items-center gap-4 px-4 py-3.5 hover:bg-elevated transition-colors cursor-pointer group"
+      onClick={onView}
+    >
+      {/* Status indicator */}
+      <div className="shrink-0 flex flex-col items-center gap-1">
+        <div className="relative">
+          <div className={clsx(
+            'w-2.5 h-2.5 rounded-full',
+            camera.is_online ? 'bg-success' : 'bg-t3',
+          )} />
+          {camera.is_online && (
+            <div className="absolute inset-0 rounded-full bg-success animate-ping opacity-30" />
+          )}
+        </div>
+      </div>
+
+      {/* Name + location — takes all available space */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-t1 truncate leading-tight">{camera.name}</p>
+        <p className="text-xs text-t2 truncate mt-0.5">{camera.location}</p>
+      </div>
+
+      {/* Metadata chips — fixed area, won't shrink below content */}
+      <div className="flex items-center gap-2 shrink-0">
+        <Chip>{MANUFACTURER_LABELS[camera.manufacturer] ?? camera.manufacturer}</Chip>
+        <Chip>{camera.retention_days}d</Chip>
+        <ConnectionIcon camera={camera} />
+      </div>
+
+      {/* Actions — always visible, not hidden on hover */}
+      <div
+        className="flex items-center gap-1 shrink-0"
+        onClick={e => e.stopPropagation()}
+      >
+        <button
+          onClick={onView}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-t3 hover:text-accent hover:bg-accent/10 transition-colors"
+          title="Ver detalhes"
+        >
+          <ExternalLink size={14} />
+        </button>
+        <button
+          onClick={onDelete}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-t3 hover:text-danger hover:bg-danger/10 transition-colors"
+          title="Remover"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Small components ─────────────────────────────────────────────────────────
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-md text-xs text-t2 font-medium whitespace-nowrap"
+      style={{ background: 'var(--elevated)', border: '1px solid var(--border)' }}
+    >
+      {children}
+    </span>
+  )
+}
+
+function ConnectionIcon({ camera }: { camera: Camera }) {
+  if (camera.agent) {
+    return (
+      <span title="Via Agent">
+        <Bot size={14} className="text-t3" />
+      </span>
+    )
+  }
+  if (camera.rtsp_url) {
+    return (
+      <span title="RTSP direto">
+        <Wifi size={14} className="text-t3" />
+      </span>
+    )
+  }
+  return (
+    <span title="RTMP push">
+      <Radio size={14} className="text-t3" />
+    </span>
+  )
+}
+
+function Stat({ color, label, value }: { color: string; label: string; value: number }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+      <span className="text-xs text-t2">
+        <span className="font-medium text-t1">{value}</span> {label}
+      </span>
+    </div>
+  )
+}
+
+function EmptyState({ hasSearch, onAdd }: { hasSearch: boolean; onAdd: () => void }) {
+  if (hasSearch) {
+    return (
+      <div className="text-center py-20 animate-fade-in">
+        <Search size={28} className="mx-auto mb-2 text-t3" />
+        <p className="text-sm text-t2">Nenhuma câmera encontrada</p>
+        <p className="text-xs text-t3 mt-1">Tente outro termo de busca</p>
+      </div>
+    )
+  }
+  return (
+    <div className="card flex flex-col items-center py-20 gap-4 animate-fade-in">
+      <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
+        style={{ background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+        <WifiOff size={24} className="text-t3" />
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-medium text-t1">Nenhuma câmera cadastrada</p>
+        <p className="text-xs text-t3 mt-1">Adicione sua primeira câmera para começar</p>
+      </div>
+      <button onClick={onAdd} className="btn btn-primary">
+        <Plus size={15} /> Adicionar câmera
+      </button>
     </div>
   )
 }

@@ -1,26 +1,31 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        vms: {
-          bg: '#0f1117',
-          sidebar: '#1a1d27',
-          card: '#1e2130',
-          'card-hover': '#252839',
-          border: '#2a2d3a',
-          accent: '#3b82f6',
-          'accent-hover': '#2563eb',
-          success: '#22c55e',
-          danger: '#ef4444',
-          warning: '#f59e0b',
-          info: '#6366f1',
-          text: '#ffffff',
-          muted: '#9ca3af',
-          'muted-dark': '#6b7280',
-        },
+        bg:       'var(--bg)',
+        surface:  'var(--surface)',
+        elevated: 'var(--elevated)',
+        border:   'var(--border)',
+        accent:   'var(--accent)',
+        't1':     'var(--text-1)',
+        't2':     'var(--text-2)',
+        't3':     'var(--text-3)',
+        success:  'var(--success)',
+        warning:  'var(--warning)',
+        danger:   'var(--danger)',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      },
+      animation: {
+        'fade-in': 'fadeIn 0.15s ease-out',
+        'slide-in': 'slideIn 0.2s ease-out',
+      },
+      keyframes: {
+        fadeIn:  { from: { opacity: '0' },                   to: { opacity: '1' } },
+        slideIn: { from: { opacity: '0', transform: 'translateY(4px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
       },
     },
   },

@@ -1,63 +1,71 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { useAuthStore } from './stores/authStore'
-import { useEffect, type ReactNode } from 'react'
-import DashboardLayout from './layouts/DashboardLayout'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import CamerasPage from './pages/CamerasPage'
-import CameraDetailPage from './pages/CameraDetailPage'
-import MosaicPage from './pages/MosaicPage'
-import RecordingsPage from './pages/RecordingsPage'
-import PlaybackPage from './pages/PlaybackPage'
-import EventsPage from './pages/EventsPage'
-import NotificationsPage from './pages/NotificationsPage'
-import AgentsPage from './pages/AgentsPage'
-import ClipsPage from './pages/ClipsPage'
-import UsersPage from './pages/UsersPage'
-import SettingsPage from './pages/SettingsPage'
-import AnalyticsPage from './pages/AnalyticsPage'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { Layout } from '@/components/layout/Layout'
+import { useAuthStore } from '@/store/authStore'
+import { useThemeStore } from '@/store/themeStore'
+import { themeService } from '@/services/api'
 
-function ProtectedRoute({ children }: { children: ReactNode }) {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  if (!isAuthenticated) return <Navigate to="/login" replace />
-  return <>{children}</>
+import { LoginPage }           from '@/pages/LoginPage'
+import { DashboardPage }       from '@/pages/DashboardPage'
+import { CamerasPage }         from '@/pages/CamerasPage'
+import { CameraDetailPage }    from '@/pages/CameraDetailPage'
+import { ROIEditorPage }       from '@/pages/ROIEditorPage'
+import { MosaicPage }          from '@/pages/MosaicPage'
+import { RecordingsPage }      from '@/pages/RecordingsPage'
+import { EventsPage }          from '@/pages/EventsPage'
+import { AnalyticsPage }       from '@/pages/AnalyticsPage'
+import { ClipsPage }           from '@/pages/ClipsPage'
+import { AgentsPage }          from '@/pages/AgentsPage'
+import { NotificationsPage }   from '@/pages/NotificationsPage'
+import { UsersPage }           from '@/pages/UsersPage'
+import { SettingsPage }        from '@/pages/SettingsPage'
+
+function RequireAuth() {
+  const { isAuthenticated } = useAuthStore()
+  if (!isAuthenticated()) return <Navigate to="/login" replace />
+  return <Outlet />
+}
+
+function ThemeLoader() {
+  const { setTheme, setLoading } = useThemeStore()
+
+  useEffect(() => {
+    themeService.get()
+      .then(t => { if (t) setTheme(t) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  return null
 }
 
 export default function App() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  const fetchUser = useAuthStore((s) => s.fetchUser)
-
-  useEffect(() => {
-    if (isAuthenticated) fetchUser()
-  }, [isAuthenticated, fetchUser])
-
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route
-        element={
-          <ProtectedRoute>
-            <DashboardLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<DashboardPage />} />
-        <Route path="cameras" element={<CamerasPage />} />
-        <Route path="cameras/:id" element={<CameraDetailPage />} />
-        <Route path="mosaic" element={<MosaicPage />} />
-        <Route path="recordings" element={<RecordingsPage />} />
-        <Route path="recordings/:cameraId/playback" element={<PlaybackPage />} />
-        <Route path="analytics" element={<AnalyticsPage />} />
-        <Route path="detections" element={<EventsPage />} />
-        <Route path="clips" element={<ClipsPage />} />
-        <Route path="people" element={<SettingsPage />} />
-        <Route path="tactical-map" element={<SettingsPage />} />
-        <Route path="users" element={<UsersPage />} />
-        <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="agents" element={<AgentsPage />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <BrowserRouter>
+      <ThemeLoader />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+
+        <Route element={<RequireAuth />}>
+          <Route element={<Layout />}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard"               element={<DashboardPage />} />
+            <Route path="/cameras"                 element={<CamerasPage />} />
+            <Route path="/cameras/:id"             element={<CameraDetailPage />} />
+            <Route path="/cameras/:id/roi"         element={<ROIEditorPage />} />
+            <Route path="/mosaic"                  element={<MosaicPage />} />
+            <Route path="/recordings"              element={<RecordingsPage />} />
+            <Route path="/events"                  element={<EventsPage />} />
+            <Route path="/analytics"               element={<AnalyticsPage />} />
+            <Route path="/clips"                   element={<ClipsPage />} />
+            <Route path="/agents"                  element={<AgentsPage />} />
+            <Route path="/notifications"           element={<NotificationsPage />} />
+            <Route path="/users"                   element={<UsersPage />} />
+            <Route path="/settings"                element={<SettingsPage />} />
+            <Route path="*"                        element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Route>
+      </Routes>
+    </BrowserRouter>
   )
 }

@@ -1,132 +1,151 @@
-import { useState } from 'react'
-import { useNavigate, Navigate } from 'react-router-dom'
-import { useAuthStore } from '../stores/authStore'
-import { Eye, EyeOff } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { authService, themeService } from '@/services/api'
+import { useAuthStore } from '@/store/authStore'
+import { useThemeStore } from '@/store/themeStore'
 
-export default function LoginPage() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
+export function LoginPage() {
+  const navigate  = useNavigate()
+  const { setAuth, isAuthenticated } = useAuthStore()
+  const { theme, setTheme, loading: themeLoading, setLoading } = useThemeStore()
+
+  const [email, setEmail]             = useState('') // usado como username
+  const [password, setPassword]       = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const login = useAuthStore((s) => s.login)
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  const navigate = useNavigate()
+  const [isLoading, setIsLoading]     = useState(false)
+  const [error, setError]             = useState('')
 
-  if (isAuthenticated) return <Navigate to="/" replace />
+  useEffect(() => {
+    if (isAuthenticated()) { navigate('/'); return }
+    themeService.get()
+      .then(t => { if (t) setTheme(t) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    setLoading(true)
+    setIsLoading(true)
     try {
-      await login(username, password)
+      const res = await authService.login({ email, password })
+      const me = await authService.me(res.access)
+      setAuth(me, res.access, res.refresh)
       navigate('/')
-    } catch {
-      setError('Credenciais inválidas. Verifique email e senha.')
+    } catch (err: any) {
+      if (err.response?.status === 401) setError('Usuário ou senha incorretos.')
+      else setError('Erro ao fazer login. Tente novamente.')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  return (
-    <div className="min-h-screen flex">
-      {/* Left — Branding */}
-      <div className="hidden lg:flex flex-1 relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-500 to-blue-700 items-center justify-center">
-        {/* Camera pattern SVG background */}
-        <div className="absolute inset-0 opacity-20">
-          <svg className="w-full h-full" viewBox="0 0 800 600" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <g key={i} transform={`translate(${(i % 5) * 170 + 40}, ${Math.floor(i / 5) * 160 + 40}) rotate(-30)`}>
-                <rect x="0" y="10" width="60" height="35" rx="4" stroke="white" strokeWidth="2" fill="none" />
-                <rect x="50" y="18" width="20" height="18" rx="9" stroke="white" strokeWidth="2" fill="none" />
-                <rect x="-15" y="35" width="8" height="15" rx="2" fill="white" opacity="0.5" />
-              </g>
-            ))}
-          </svg>
-        </div>
+  const primary = theme?.primary_color || '#3B82F6'
 
-        <div className="relative z-10 text-center text-white px-8">
-          <h1 className="text-5xl font-bold mb-3">VMS</h1>
-          <p className="text-xl opacity-90 mb-10">Monitoramento Inteligente</p>
-          <div className="grid grid-cols-2 gap-3 max-w-xs mx-auto">
-            {['IA Embarcada', 'Multi-Câmera', 'Analíticos', 'Dark Mode'].map((badge) => (
-              <div
-                key={badge}
-                className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 text-sm font-medium"
-              >
-                {badge}
+  if (themeLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0A0A0F' }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-t-transparent mx-auto"
+            style={{ borderColor: primary, borderTopColor: 'transparent' }} />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen flex" style={{ background: '#0A0A0F' }}>
+      {/* Left — branding */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+        <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, #0A0A0F 0%, ${primary}55 50%, #0A0A0F 100%)` }} />
+        <div className="absolute inset-0" style={{ background: primary, opacity: 0.15 }} />
+        <div className="relative z-10 flex flex-col items-center justify-center w-full p-16">
+          {theme?.logo_url && <img src={theme.logo_url} alt={theme.name} className="h-14 mb-8 object-contain" />}
+          <h1 className="text-5xl font-bold text-white mb-3">{theme?.name || 'VMS'}</h1>
+          <p className="text-lg text-white/80">Monitoramento Inteligente</p>
+          <div className="mt-12 grid grid-cols-2 gap-4 w-full max-w-sm">
+            {['Self-Hosted', 'Multi-Câmera', 'Analíticos', 'Dark Mode'].map(f => (
+              <div key={f} className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 text-center">
+                <p className="text-white text-sm font-medium">{f}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Right — Login form */}
-      <div className="flex-1 flex items-center justify-center bg-vms-bg p-8">
+      {/* Right — form */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8"
+        style={{ background: '#111118' }}>
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
-          <div className="lg:hidden text-center mb-8">
-            <div className="w-12 h-12 rounded-xl bg-vms-accent flex items-center justify-center text-white font-bold text-xl mx-auto mb-2">
-              V
-            </div>
-            <h1 className="text-2xl font-bold">VMS</h1>
+          <div className="lg:hidden flex justify-center mb-8">
+            {theme?.logo_url
+              ? <img src={theme.logo_url} alt={theme.name} className="h-12 object-contain" />
+              : <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white text-xl font-bold"
+                  style={{ background: primary }}>V</div>
+            }
           </div>
 
-          <h2 className="text-2xl font-bold mb-1">Acesso ao Sistema</h2>
-          <p className="text-vms-muted mb-8">Entre com suas credenciais</p>
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-white">Acesso ao Sistema</h2>
+            <p className="text-sm mt-1" style={{ color: '#71717A' }}>Entre com suas credenciais</p>
+          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          {error && (
+            <div className="mb-5 p-3 rounded-lg border flex items-start gap-2 text-sm"
+              style={{ background: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.25)', color: '#FCA5A5' }}>
+              <svg className="w-4 h-4 mt-0.5 shrink-0 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm text-vms-muted mb-1.5">Email</label>
+              <label className="label">Usuário</label>
               <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-vms-card border border-vms-border rounded-lg px-4 py-3 text-white placeholder-vms-muted-dark focus:outline-none focus:border-vms-accent transition-colors"
-                placeholder="admin@vms.dev"
-                required
-                autoFocus
+                type="text" required autoFocus autoComplete="username"
+                className="input"
+                placeholder="seu_usuario"
+                value={email} onChange={e => setEmail(e.target.value)}
               />
             </div>
-
             <div>
-              <label className="block text-sm text-vms-muted mb-1.5">Senha</label>
+              <label className="label">Senha</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-vms-card border border-vms-border rounded-lg px-4 py-3 text-white placeholder-vms-muted-dark focus:outline-none focus:border-vms-accent transition-colors pr-10"
+                  required autoComplete="current-password"
+                  className="input pr-10"
                   placeholder="••••••••"
-                  required
+                  value={password} onChange={e => setPassword(e.target.value)}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-vms-muted hover:text-white"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 transition"
+                  style={{ color: '#52525B' }}
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
 
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-red-400 text-sm">
-                {error}
-              </div>
-            )}
-
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-vms-accent hover:bg-vms-accent-hover disabled:opacity-60 rounded-lg py-3 font-semibold transition-colors"
+              disabled={isLoading}
+              className="w-full py-2.5 px-4 text-white font-semibold rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
+              style={{ background: primary }}
             >
-              {loading ? 'Entrando...' : 'Entrar'}
+              {isLoading ? <><Loader2 size={16} className="animate-spin" />Entrando...</> : 'Entrar'}
             </button>
           </form>
 
-          <p className="text-center text-vms-muted-dark text-sm mt-10">VMS © 2026</p>
+          <div className="mt-8 text-center text-xs" style={{ color: '#52525B' }}>
+            <p>{theme?.name || 'VMS'} &copy; {new Date().getFullYear()}</p>
+          </div>
         </div>
       </div>
     </div>

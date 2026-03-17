@@ -1,236 +1,168 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { Cctv, Wifi, WifiOff, ShieldAlert, Film, TrendingUp, ArrowRight } from 'lucide-react'
 import {
-  Camera,
-  Wifi,
-  WifiOff,
-  AlertTriangle,
-  Scissors,
-  ArrowUpRight,
-} from 'lucide-react'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  ArcElement,
-  Tooltip,
-  Legend,
-} from 'chart.js'
-import { Bar, Doughnut } from 'react-chartjs-2'
-import StatsCard from '../components/StatsCard'
-import api from '../lib/api'
-import { useCameraStore, type Camera as CameraType } from '../stores/cameraStore'
-import { todayISO } from '../lib/utils'
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
+} from 'recharts'
+import { dashboardService, cameraService } from '@/services/api'
+import { PageSpinner } from '@/components/ui/Spinner'
+import { Badge } from '@/components/ui/Badge'
+import type { DashboardStats, EventsByHour, Camera } from '@/types'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
-
-interface HourlyData {
-  [hour: string]: number
+const EVENT_LABELS: Record<string, string> = {
+  'camera.online':          'Online',
+  'camera.offline':         'Offline',
+  'motion.detected':        'Movimento',
+  'alpr.detected':          'Placa',
+  'intrusion.detected':     'Intrusão',
+  'fire.detected':          'Fogo',
+  'video.loss':             'Perda de Vídeo',
+  'tampering.detected':     'Adulteração',
+  'line_crossing.detected': 'Cruzamento',
+  'face.detected':          'Facial',
 }
 
-interface EventTypeCounts {
-  [type: string]: number
-}
-
-export default function DashboardPage() {
-  const { cameras, fetchCameras } = useCameraStore()
-  const [todayEvents, setTodayEvents] = useState(0)
-  const [clipCount, setClipCount] = useState(0)
-  const [hourlyDetections, setHourlyDetections] = useState<HourlyData>({})
-  const [eventTypes, setEventTypes] = useState<EventTypeCounts>({})
+export function DashboardPage() {
+  const navigate = useNavigate()
+  const [stats, setStats]     = useState<DashboardStats | null>(null)
+  const [hours, setHours]     = useState<EventsByHour[]>([])
+  const [cameras, setCameras] = useState<Camera[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchCameras()
-    loadDashboardData()
+    Promise.all([
+      dashboardService.stats(),
+      dashboardService.eventsByHour(),
+      cameraService.list({ page_size: 6 }),
+    ]).then(([s, h, c]) => {
+      setStats(s); setHours(h); setCameras(c.results)
+    }).finally(() => setLoading(false))
   }, [])
 
-  const loadDashboardData = async () => {
-    try {
-      const [eventsRes, clipsRes] = await Promise.all([
-        api.get('/events/', { params: { created_at__gte: todayISO(), page_size: 100 } }),
-        api.get('/recordings/clips/', { params: { page_size: 1 } }),
-      ])
+  if (loading) return <PageSpinner />
 
-      const events = eventsRes.data.results ?? eventsRes.data
-      setTodayEvents(eventsRes.data.count ?? events.length)
-      setClipCount(clipsRes.data.count ?? 0)
-
-      // Aggregate hourly
-      const hourly: HourlyData = {}
-      const types: EventTypeCounts = {}
-      for (const ev of events) {
-        const hour = new Date(ev.created_at).getHours().toString().padStart(2, '0') + ':00'
-        hourly[hour] = (hourly[hour] || 0) + 1
-        const t = ev.event_type ?? 'unknown'
-        types[t] = (types[t] || 0) + 1
-      }
-      setHourlyDetections(hourly)
-      setEventTypes(types)
-    } catch {
-      // silent
-    }
-  }
-
-  const online = cameras.filter((c) => c.is_online).length
-  const offline = cameras.filter((c) => !c.is_online).length
-
-  // Chart data
-  const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0') + ':00')
-  const barData = {
-    labels: hours,
-    datasets: [
-      {
-        label: 'Detecções',
-        data: hours.map((h) => hourlyDetections[h] || 0),
-        backgroundColor: '#3b82f6',
-        borderRadius: 4,
-      },
-    ],
-  }
-
-  const barOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { display: false } },
-      y: { ticks: { color: '#6b7280' }, grid: { color: '#1e2130' } },
-    },
-  }
-
-  const typeLabels = Object.keys(eventTypes)
-  const typeColors = ['#3b82f6', '#22c55e', '#ef4444', '#f59e0b', '#6366f1', '#ec4899', '#14b8a6', '#8b5cf6']
-  const doughnutData = {
-    labels: typeLabels.map((t) => t.replace('.', ' ')),
-    datasets: [
-      {
-        data: typeLabels.map((t) => eventTypes[t]),
-        backgroundColor: typeColors.slice(0, typeLabels.length),
-        borderWidth: 0,
-      },
-    ],
-  }
-
-  const doughnutOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { position: 'bottom' as const, labels: { color: '#9ca3af', padding: 12, font: { size: 11 } } } },
-  }
+  const statCards = [
+    { label: 'Total de Câmeras',  value: stats?.total_cameras ?? 0,         icon: Cctv,        color: '#3B82F6' },
+    { label: 'Online',            value: stats?.online_cameras ?? 0,         icon: Wifi,        color: '#22C55E' },
+    { label: 'Offline',           value: stats?.offline_cameras ?? 0,        icon: WifiOff,     color: '#EF4444' },
+    { label: 'Eventos Hoje',      value: stats?.total_events_today ?? 0,     icon: ShieldAlert, color: '#F59E0B' },
+    { label: 'Clips',             value: stats?.total_clips ?? 0,            icon: Film,        color: '#8B5CF6' },
+  ]
 
   return (
-    <div>
-      <h1 className="text-xl font-bold mb-6">Dashboard</h1>
-
+    <div className="space-y-5 animate-fade-in">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-        <StatsCard
-          label="Total de Câmeras"
-          value={cameras.length}
-          icon={<Camera size={20} className="text-white" />}
-          color="bg-vms-accent"
-        />
-        <StatsCard
-          label="Online"
-          value={online}
-          icon={<Wifi size={20} className="text-white" />}
-          color="bg-vms-success"
-        />
-        <StatsCard
-          label="Offline"
-          value={offline}
-          icon={<WifiOff size={20} className="text-white" />}
-          color="bg-red-600"
-        />
-        <StatsCard
-          label="Detecções Hoje"
-          value={todayEvents}
-          icon={<AlertTriangle size={20} className="text-white" />}
-          color="bg-vms-info"
-        />
-        <StatsCard
-          label="Clips"
-          value={clipCount}
-          icon={<Scissors size={20} className="text-white" />}
-          color="bg-purple-600"
-        />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {statCards.map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="card px-4 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-t2 font-medium">{label}</p>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: color + '18' }}>
+                <Icon size={16} style={{ color }} />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-t1">{value.toLocaleString()}</p>
+          </div>
+        ))}
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
-        <div className="lg:col-span-3 bg-vms-card rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Events chart */}
+        <div className="card p-4 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-semibold text-sm">Detecções por Hora</h3>
-              <p className="text-vms-muted text-xs">Últimas 24 horas</p>
+              <p className="text-sm font-semibold text-t1">Eventos por Hora</p>
+              <p className="text-xs text-t3">Últimas 24 horas</p>
             </div>
-            <ArrowUpRight size={16} className="text-vms-muted" />
+            <TrendingUp size={16} className="text-t3" />
           </div>
-          <div className="h-48">
-            <Bar data={barData} options={barOptions} />
-          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={hours} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="hour" tick={{ fontSize: 11, fill: 'var(--text-3)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--text-3)' }} />
+              <Tooltip
+                contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: 'var(--text-2)' }}
+                itemStyle={{ color: 'var(--accent)' }}
+              />
+              <Area type="monotone" dataKey="events" stroke="var(--accent)" fill="url(#grad)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
 
-        <div className="lg:col-span-2 bg-vms-card rounded-xl p-4">
-          <div className="mb-3">
-            <h3 className="font-semibold text-sm">Eventos Hoje</h3>
-            <p className="text-vms-muted text-xs">Por tipo de analítico</p>
-          </div>
-          {typeLabels.length > 0 ? (
-            <div className="h-48">
-              <Doughnut data={doughnutData} options={doughnutOptions} />
+        {/* Events by type */}
+        <div className="card p-4">
+          <p className="text-sm font-semibold text-t1 mb-1">Eventos Hoje</p>
+          <p className="text-xs text-t3 mb-4">Por tipo de evento</p>
+          {Object.entries(stats?.events_by_type_today ?? {}).length === 0 ? (
+            <div className="flex-1 flex items-center justify-center py-8">
+              <p className="text-xs text-t3">Nenhum evento hoje</p>
             </div>
           ) : (
-            <div className="h-48 flex items-center justify-center text-vms-muted text-sm">
-              Nenhum evento hoje
+            <div className="space-y-2.5">
+              {Object.entries(stats?.events_by_type_today ?? {})
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 8)
+                .map(([type, count]) => (
+                  <div key={type} className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-t2 truncate">{EVENT_LABELS[type] ?? type}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--elevated)' }}>
+                        <div className="h-full rounded-full" style={{
+                          background: 'var(--accent)',
+                          width: `${Math.min(100, (count / Math.max(...Object.values(stats!.events_by_type_today))) * 100)}%`,
+                        }} />
+                      </div>
+                      <span className="text-xs font-semibold text-t1 w-6 text-right">{count}</span>
+                    </div>
+                  </div>
+                ))}
             </div>
           )}
         </div>
       </div>
 
-      {/* Camera list */}
-      <div className="bg-vms-card rounded-xl p-4">
+      {/* Recent cameras */}
+      <div className="card p-4">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-semibold text-sm">Câmeras</h3>
-            <p className="text-vms-muted text-xs">Status em tempo real</p>
+            <p className="text-sm font-semibold text-t1">Câmeras</p>
+            <p className="text-xs text-t3">Status em tempo real</p>
           </div>
-          <Link to="/cameras" className="text-vms-accent text-sm hover:underline flex items-center gap-1">
-            Ver todas <ArrowUpRight size={14} />
-          </Link>
+          <button onClick={() => navigate('/cameras')} className="btn btn-ghost text-xs gap-1">
+            Ver todas <ArrowRight size={14} />
+          </button>
         </div>
         <div className="space-y-2">
-          {cameras.slice(0, 10).map((cam) => (
-            <CameraStatusRow key={cam.id} camera={cam} />
+          {cameras.map(cam => (
+            <div key={cam.id}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-elevated transition cursor-pointer"
+              onClick={() => navigate(`/cameras/${cam.id}`)}>
+              <div className={`w-2 h-2 rounded-full shrink-0 ${cam.is_online ? 'bg-green-500' : 'bg-red-500'}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-t1 truncate">{cam.name}</p>
+                <p className="text-xs text-t3 truncate">{cam.location}</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge variant={cam.is_online ? 'success' : 'danger'} dot>
+                  {cam.is_online ? 'Online' : 'Offline'}
+                </Badge>
+                <span className="text-xs text-t3 uppercase">{cam.manufacturer}</span>
+              </div>
+            </div>
           ))}
           {cameras.length === 0 && (
-            <p className="text-vms-muted text-sm py-4 text-center">Nenhuma câmera cadastrada</p>
+            <p className="text-sm text-t3 text-center py-4">Nenhuma câmera cadastrada</p>
           )}
         </div>
       </div>
     </div>
-  )
-}
-
-function CameraStatusRow({ camera }: { camera: CameraType }) {
-  return (
-    <Link
-      to={`/cameras/${camera.id}`}
-      className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-vms-card-hover transition-colors"
-    >
-      <div className="flex items-center gap-3">
-        <div className={`w-2 h-2 rounded-full ${camera.is_online ? 'bg-vms-success' : 'bg-vms-danger'}`} />
-        <div>
-          <p className="text-sm font-medium">{camera.name}</p>
-          <p className="text-xs text-vms-muted">{camera.location}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className={`text-xs ${camera.is_online ? 'text-vms-success' : 'text-vms-danger'}`}>
-          ● {camera.is_online ? 'Online' : 'Offline'}
-        </span>
-        <span className="text-xs text-vms-muted uppercase">{camera.manufacturer}</span>
-      </div>
-    </Link>
   )
 }
